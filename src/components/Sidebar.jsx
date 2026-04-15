@@ -1,15 +1,32 @@
 const tabs = ["Journey", "Landmarks", "Saved"];
 
-const placeOptions = ["Camden Town", "UCL"];
-
 function formatTime(minutes) {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
+  const total = Number(minutes) || 0;
+  const h = Math.floor(total / 60);
+  const m = total % 60;
 
   if (h > 0) {
     return m > 0 ? `${h}h ${m}m` : `${h}h`;
   }
   return `${m} min`;
+}
+
+function SidebarSection({ title, children, className = "" }) {
+  return (
+    <section className={`sidebar-section ${className}`.trim()}>
+      {title ? <div className="section-label">{title}</div> : null}
+      {children}
+    </section>
+  );
+}
+
+function SummaryRow({ label, value }) {
+  return (
+    <div className="summary-row">
+      <span className="summary-label">{label}</span>
+      <span className="summary-value">{value}</span>
+    </div>
+  );
 }
 
 export default function Sidebar({
@@ -26,18 +43,32 @@ export default function Sidebar({
   timeMinutes,
   handleTimeChange,
   stats,
+  locations = ["Camden Town", "UCL"],
 }) {
+  const routeSummary = {
+    distance: stats?.distance ?? "4.8 km",
+    duration:
+      stats?.durationText ??
+      formatTime(stats?.durationMinutes ?? timeMinutes ?? 120),
+    heritageStops: stats?.heritageStops ?? 6,
+    urbanFeatures: stats?.urbanFeatures ?? 14,
+  };
+
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
         <div className="app-title">London</div>
         <div className="app-subtitle">Heritage Explorer</div>
+        <div className="app-caption">
+          Explore route-based heritage stories across the city
+        </div>
       </div>
 
       <div className="tab-bar">
         {tabs.map((tab) => (
           <button
             key={tab}
+            type="button"
             className={`tab ${activeTab === tab ? "active" : ""}`}
             onClick={() => setActiveTab(tab)}
           >
@@ -46,137 +77,187 @@ export default function Sidebar({
         ))}
       </div>
 
-      <div className="panel">
-        <div className="field-label">Start</div>
-        <div className="field-input">
-          <select value={start} onChange={(e) => setStart(e.target.value)}>
-            {placeOptions.map((place) => (
-              <option key={place} value={place}>
-                {place}
-              </option>
-            ))}
-          </select>
-          <div className="pin pin-start" />
-        </div>
+      {activeTab === "Journey" && (
+        <>
+          <SidebarSection title="Route inputs">
+            <div className="control-group">
+              <label className="control-label" htmlFor="start-select">
+                Start
+              </label>
+              <div className="select-row">
+                <select
+                  id="start-select"
+                  value={start}
+                  onChange={(e) => setStart(e.target.value)}
+                >
+                  {locations.map((location) => (
+                    <option key={location} value={location}>
+                      {location}
+                    </option>
+                  ))}
+                </select>
+                <span className="location-dot start-dot" />
+              </div>
+            </div>
 
-        <div className="field-label">End</div>
-        <div className="field-input field-input-last">
-          <select value={end} onChange={(e) => setEnd(e.target.value)}>
-            {placeOptions.map((place) => (
-              <option key={place} value={place}>
-                {place}
-              </option>
-            ))}
-          </select>
-          <div className="pin pin-end" />
-        </div>
-      </div>
+            <div className="control-group">
+              <label className="control-label" htmlFor="end-select">
+                End
+              </label>
+              <div className="select-row">
+                <select
+                  id="end-select"
+                  value={end}
+                  onChange={(e) => setEnd(e.target.value)}
+                >
+                  {locations.map((location) => (
+                    <option key={location} value={location}>
+                      {location}
+                    </option>
+                  ))}
+                </select>
+                <span className="location-dot end-dot" />
+              </div>
+            </div>
+          </SidebarSection>
 
-      <div className="panel">
-        <div className="section-title">Travel mode</div>
-        <div className="segmented">
-          <button
-            className={travelMode === "walk" ? "active" : ""}
-            onClick={() => setTravelMode("walk")}
-          >
-            Walk
-          </button>
-          <button
-            className={travelMode === "cycle" ? "active" : ""}
-            onClick={() => setTravelMode("cycle")}
-          >
-            Cycle
-          </button>
-        </div>
-
-        <div className="section-title">Route type</div>
-        <div className="segmented segmented-bottom">
-          <button
-            className={routeType === "direct" ? "active" : ""}
-            onClick={() => setRouteType("direct")}
-          >
-            Direct
-          </button>
-          <button
-            className={routeType === "adventure" ? "active" : ""}
-            onClick={() => setRouteType("adventure")}
-          >
-            Adventure
-          </button>
-        </div>
-
-        <div className={`time-box ${routeType === "direct" ? "disabled" : ""}`}>
-          <div className="section-title section-title-tight">Available time</div>
-          <div className="time-row">
-            <div className="time-controls">
+          <SidebarSection title="Travel preferences">
+            <div className="toggle-group">
               <button
-                className="time-btn"
-                onClick={() => handleTimeChange(-30)}
-                disabled={routeType === "direct"}
+                type="button"
+                className={`toggle-pill ${
+                  travelMode === "walk" ? "active" : ""
+                }`}
+                onClick={() => setTravelMode("walk")}
               >
-                −
+                Walk
               </button>
-              <div className="time-display">{formatTime(timeMinutes)}</div>
               <button
-                className="time-btn"
-                onClick={() => handleTimeChange(30)}
-                disabled={routeType === "direct"}
+                type="button"
+                className={`toggle-pill ${
+                  travelMode === "cycle" ? "active" : ""
+                }`}
+                onClick={() => setTravelMode("cycle")}
               >
-                +
+                Cycle
               </button>
             </div>
-          </div>
+
+            <div className="control-subtitle">Route type</div>
+            <div className="toggle-group">
+              <button
+                type="button"
+                className={`toggle-pill ${
+                  routeType === "direct" ? "active" : ""
+                }`}
+                onClick={() => setRouteType("direct")}
+              >
+                Direct
+              </button>
+              <button
+                type="button"
+                className={`toggle-pill ${
+                  routeType === "adventure" ? "active" : ""
+                }`}
+                onClick={() => setRouteType("adventure")}
+              >
+                Adventure
+              </button>
+            </div>
+          </SidebarSection>
+
+          {routeType === "adventure" && (
+            <SidebarSection title="Available time" className="time-card">
+              <div className="time-stepper">
+                <button
+                  type="button"
+                  className="step-button"
+                  onClick={() => handleTimeChange(-30)}
+                  aria-label="Decrease available time"
+                >
+                  −
+                </button>
+
+                <div className="time-display">{formatTime(timeMinutes)}</div>
+
+                <button
+                  type="button"
+                  className="step-button"
+                  onClick={() => handleTimeChange(30)}
+                  aria-label="Increase available time"
+                >
+                  +
+                </button>
+              </div>
+            </SidebarSection>
+          )}
+
+          <SidebarSection title="Route summary" className="summary-card">
+            <SummaryRow label="Distance" value={routeSummary.distance} />
+            <SummaryRow label="Duration" value={routeSummary.duration} />
+            <SummaryRow
+              label="Heritage stops"
+              value={routeSummary.heritageStops}
+            />
+            <SummaryRow
+              label="Urban features"
+              value={routeSummary.urbanFeatures}
+            />
+
+            <div className="route-note">
+              {routeType === "direct"
+                ? "Direct prioritises a faster, more functional route."
+                : "Adventure prioritises a richer, more exploratory journey."}
+            </div>
+          </SidebarSection>
+
+          <SidebarSection title="Map legend">
+            <div className="legend-group primary">
+              <div className="legend-item">
+                <span className="legend-dot heritage-dot" />
+                <span>Heritage sites</span>
+              </div>
+            </div>
+
+            <div className="legend-group">
+              <div className="legend-item">
+                <span className="legend-dot bus-dot" />
+                <span>Bus stops</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-dot tree-dot" />
+                <span>Trees</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-dot bench-dot" />
+                <span>Benches</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-dot signal-dot" />
+                <span>Signals</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-dot lamp-dot" />
+                <span>Street lamps</span>
+              </div>
+            </div>
+          </SidebarSection>
+        </>
+      )}
+
+      {activeTab === "Landmarks" && (
+        <div className="tab-panel-placeholder">
+          <h3>Landmarks</h3>
+          <p>Browse heritage sites along the selected route.</p>
         </div>
-      </div>
+      )}
 
-      <div className="panel">
-        <div className="legend-title">Map legend</div>
-        <div className="legend-items">
-          <div className="legend-item">
-            <div className="legend-dot ld-heritage" />
-            Heritage sites
-          </div>
-          <div className="legend-item">
-            <div className="legend-dot ld-tree" />
-            Trees
-          </div>
-          <div className="legend-item">
-            <div className="legend-dot ld-bus" />
-            Bus stops
-          </div>
-          <div className="legend-item">
-            <div className="legend-dot ld-signal" />
-            Signals
-          </div>
-          <div className="legend-item">
-            <div className="legend-square ld-bench" />
-            Benches
-          </div>
-          <div className="legend-item">
-            <div className="legend-dot ld-lamp" />
-            Street lamps
-          </div>
+      {activeTab === "Saved" && (
+        <div className="tab-panel-placeholder">
+          <h3>Saved</h3>
+          <p>Keep favourite places and routes here.</p>
         </div>
-      </div>
-
-      <div className="route-info">
-  <div className="route-stats">
-    <div className="stat-card">
-      <div className="stat-val">{stats.stops}</div>
-      <div className="stat-lbl">Heritage stops</div>
-    </div>
-    <div className="stat-card">
-      <div className="stat-val">{formatTime(stats.time)}</div>
-      <div className="stat-lbl">Est. time</div>
-    </div>
-    <div className="stat-card">
-      <div className="stat-val">{stats.distance} km</div>
-      <div className="stat-lbl">Distance</div>
-    </div>
-  </div>
-
-  <div className="route-note">Route updates automatically</div>
-</div>
+      )}
     </aside>
   );
 }
