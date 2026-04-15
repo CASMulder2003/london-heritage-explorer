@@ -8,10 +8,10 @@ import { getRoute } from "./services/api";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("Journey");
-  const [start, setStart] = useState("9 Approach Road, Camden");
+  const [start, setStart] = useState("Camden Town, London");
   const [end, setEnd] = useState("UCL, Gower Street, WC1");
   const [travelMode, setTravelMode] = useState("walk");
-  const [routeType, setRouteType] = useState("adventure");
+  const [routeType, setRouteType] = useState("direct");
   const [timeMinutes, setTimeMinutes] = useState(120);
 
   const [selectedSite, setSelectedSite] = useState(null);
@@ -39,21 +39,26 @@ export default function App() {
         setError("");
 
         const data = await getRoute({
-          start,
-          end,
-          mode: travelMode,
+          startText: start,
+          endText: end,
+          travelMode,
           routeType,
           availableTime: timeMinutes,
         });
+
+        console.log("routeData:", data);
+        console.log("route source:", data?.meta?.source);
+        console.log("route error:", data?.meta?.error);
 
         if (!cancelled) {
           setRouteData(data);
         }
       } catch (err) {
+        console.error("App loadRoute error:", err);
+
         if (!cancelled) {
           setError("Could not load route.");
         }
-        console.error(err);
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -85,10 +90,13 @@ export default function App() {
   }, [routeData, selectedSite]);
 
   const stats = useMemo(() => {
+    const distanceMeters = routeData?.summary?.distance ?? 0;
+    const durationSeconds = routeData?.summary?.duration ?? 0;
+
     return {
       stops: routeData?.stops?.length ?? 0,
-      time: routeData?.durationMin ?? 0,
-      distance: routeData?.distanceKm?.toFixed(1) ?? "0.0",
+      time: Math.round(durationSeconds / 60),
+      distance: (distanceMeters / 1000).toFixed(1),
     };
   }, [routeData]);
 
@@ -113,6 +121,13 @@ export default function App() {
       <main className="map-area">
         {loading && <div className="route-status">Calculating route...</div>}
         {error && <div className="route-status route-error">{error}</div>}
+
+        {routeData?.meta?.source && (
+          <div className="route-status">
+            Source: {routeData.meta.source}
+            {routeData?.meta?.error ? ` | Error: ${routeData.meta.error}` : ""}
+          </div>
+        )}
 
         <MapView
           routeType={routeType}

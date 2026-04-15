@@ -1,74 +1,79 @@
-import { heritageSites } from "../data/heritageSites";
+import { getDirectRoute } from "./routing";
+import { getMockRoute } from "../data/mockRoute";
 
-const directGeometry = [
-  { x: 120, y: 560 },
-  { x: 180, y: 500 },
-  { x: 240, y: 430 },
-  { x: 300, y: 360 },
-  { x: 360, y: 290 },
-  { x: 430, y: 210 },
-];
+const TEST_LOCATIONS = {
+  "camden town london": { lat: 51.5392, lng: -0.1426 },
+  "university college london gower street london": { lat: 51.5246, lng: -0.1340 },
+  "ucl gower street wc1": { lat: 51.5246, lng: -0.1340 },
+  "ucl gower street london": { lat: 51.5246, lng: -0.1340 },
+};
 
-const adventureGeometry = [
-  { x: 120, y: 560 },
-  { x: 170, y: 500 },
-  { x: 230, y: 420 },
-  { x: 280, y: 340 },
-  { x: 360, y: 330 },
-  { x: 430, y: 250 },
-  { x: 520, y: 120 },
-];
-
-function pickSites(indexes) {
-  return indexes.map((i) => heritageSites[i]).filter(Boolean);
+function normalizePlaceKey(text = "") {
+  return text
+    .toLowerCase()
+    .replace(/[.,]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export async function getRoute({
-  start,
-  end,
-  mode = "walk",
-  routeType = "direct",
-  availableTime = 120,
+  startText,
+  endText,
+  travelMode,
+  routeType,
+  availableTime,
 }) {
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  if (routeType === "adventure") {
+    return getMockRoute({
+      startText,
+      endText,
+      travelMode,
+      routeType,
+      availableTime,
+    });
+  }
 
-  const directStops = pickSites([2, 4]);
-  const adventureCandidates = pickSites([0, 1, 2, 4]);
+  try {
+    const startKey = normalizePlaceKey(startText);
+    const endKey = normalizePlaceKey(endText);
 
-  const maxAdventureStops = Math.max(
-    2,
-    Math.min(adventureCandidates.length, Math.floor(availableTime / 30))
-  );
+    const startCoords = TEST_LOCATIONS[startKey];
+    const endCoords = TEST_LOCATIONS[endKey];
 
-  const adventureStops = adventureCandidates.slice(0, maxAdventureStops);
+    if (!startCoords || !endCoords) {
+      throw new Error(
+        `Test coordinates not found for current inputs | start="${startText}" | end="${endText}"`
+      );
+    }
 
-  const baseRoute =
-    routeType === "adventure"
-      ? {
-          geometry: adventureGeometry,
-          stops: adventureStops,
-          distanceKm: 2.0,
-          durationMin: 96,
-        }
-      : {
-          geometry: directGeometry,
-          stops: directStops,
-          distanceKm: 1.6,
-          durationMin: 24,
-        };
+    const route = await getDirectRoute(startCoords, endCoords, travelMode);
 
-  const adjustedDuration =
-    mode === "cycle"
-      ? Math.round(baseRoute.durationMin * 0.65)
-      : baseRoute.durationMin;
+    return {
+      ...route,
+      meta: {
+        source: "real-api",
+        startLabel: startText,
+        endLabel: endText,
+      },
+    };
+  } catch (error) {
+    console.error("Real route failed, fallback to mock:", error);
 
-  return {
-    ...baseRoute,
-    start,
-    end,
-    mode,
-    routeType,
-    availableTime,
-    durationMin: adjustedDuration,
-  };
+    const mockRoute = getMockRoute({
+      startText,
+      endText,
+      travelMode,
+      routeType,
+      availableTime,
+    });
+
+    return {
+      ...mockRoute,
+      meta: {
+        ...mockRoute.meta,
+        source: "mock-fallback",
+        error: error.message,
+      },
+    };
+  }
 }

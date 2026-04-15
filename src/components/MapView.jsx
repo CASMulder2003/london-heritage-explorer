@@ -24,6 +24,44 @@ function SmallSquare({ x, y, fill, size = 9 }) {
   );
 }
 
+/**
+ * Convert lat/lng points into SVG x/y points based on current route bounds.
+ * Keeps everything inside the 620x680 canvas with padding.
+ */
+function projectGeoToSvg(points = [], width = 620, height = 680, padding = 60) {
+  if (!points.length) return [];
+
+  const lngs = points.map((p) => p.lng);
+  const lats = points.map((p) => p.lat);
+
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+
+  const drawableWidth = width - padding * 2;
+  const drawableHeight = height - padding * 2;
+
+  return points.map((p) => {
+    const x =
+      maxLng === minLng
+        ? width / 2
+        : padding + ((p.lng - minLng) / (maxLng - minLng)) * drawableWidth;
+
+    // SVG y axis goes downward, so latitude needs reversing
+    const y =
+      maxLat === minLat
+        ? height / 2
+        : padding + ((maxLat - p.lat) / (maxLat - minLat)) * drawableHeight;
+
+    return {
+      ...p,
+      x,
+      y,
+    };
+  });
+}
+
 function buildRoutePath(points = []) {
   if (!points.length) return "";
 
@@ -58,12 +96,26 @@ export default function MapView({
   onSelectSite,
 }) {
   const geometry = routeData?.geometry || [];
-  const routePath = buildRoutePath(geometry);
 
-  const startPoint = geometry[0];
-  const endPoint = geometry[geometry.length - 1];
+  // 1. 把真实路线经纬度转成 SVG 坐标
+  const projectedGeometry = projectGeoToSvg(geometry);
 
-  const visibleSites = routeStops.length ? routeStops : heritageSites;
+  // 2. stops 如果已经有 lat/lng，就跟着路线一起投影
+  const projectedStops =
+    routeStops.length && geometry.length
+      ? projectGeoToSvg(routeStops)
+      : routeStops;
+
+  const routePath = buildRoutePath(projectedGeometry);
+
+  const startPoint = projectedGeometry[0];
+  const endPoint = projectedGeometry[projectedGeometry.length - 1];
+
+  const visibleSites = projectedStops.length ? projectedStops : heritageSites;
+
+  // 让 selectedSite 能对应到投影后的 site
+  const selectedProjectedSite =
+    visibleSites.find((site) => site.id === selectedSite?.id) || null;
 
   return (
     <svg
@@ -73,114 +125,18 @@ export default function MapView({
     >
       <rect width="620" height="680" fill="#F0EBE0" />
 
-      <rect
-        x="30"
-        y="30"
-        width="140"
-        height="90"
-        rx="2"
-        fill="#E8E2D4"
-        opacity="0.8"
-      />
-      <rect
-        x="200"
-        y="50"
-        width="180"
-        height="70"
-        rx="2"
-        fill="#E8E2D4"
-        opacity="0.8"
-      />
-      <rect
-        x="410"
-        y="40"
-        width="180"
-        height="100"
-        rx="2"
-        fill="#E8E2D4"
-        opacity="0.8"
-      />
-      <rect
-        x="30"
-        y="160"
-        width="100"
-        height="120"
-        rx="2"
-        fill="#E8E2D4"
-        opacity="0.8"
-      />
-      <rect
-        x="160"
-        y="150"
-        width="130"
-        height="90"
-        rx="2"
-        fill="#E8E2D4"
-        opacity="0.8"
-      />
-      <rect
-        x="330"
-        y="170"
-        width="120"
-        height="120"
-        rx="2"
-        fill="#E8E2D4"
-        opacity="0.8"
-      />
-      <rect
-        x="470"
-        y="180"
-        width="100"
-        height="90"
-        rx="2"
-        fill="#E8E2D4"
-        opacity="0.8"
-      />
-      <rect
-        x="70"
-        y="330"
-        width="110"
-        height="120"
-        rx="2"
-        fill="#E8E2D4"
-        opacity="0.8"
-      />
-      <rect
-        x="220"
-        y="320"
-        width="140"
-        height="100"
-        rx="2"
-        fill="#E8E2D4"
-        opacity="0.8"
-      />
-      <rect
-        x="390"
-        y="330"
-        width="160"
-        height="120"
-        rx="2"
-        fill="#E8E2D4"
-        opacity="0.8"
-      />
-      <rect
-        x="100"
-        y="500"
-        width="150"
-        height="110"
-        rx="2"
-        fill="#E8E2D4"
-        opacity="0.8"
-      />
-      <rect
-        x="300"
-        y="500"
-        width="180"
-        height="100"
-        rx="2"
-        fill="#E8E2D4"
-        opacity="0.8"
-      />
+      <rect x="30" y="30" width="140" height="90" rx="2" fill="#E8E2D4" opacity="0.8" />
+      <rect x="200" y="50" width="180" height="70" rx="2" fill="#E8E2D4" opacity="0.8" />
+      <rect x="410" y="40" width="180" height="100" rx="2" fill="#E8E2D4" opacity="0.8" />
+      <rect x="30" y="160" width="100" height="120" rx="2" fill="#E8E2D4" opacity="0.8" />
+      <rect x="160" y="150" width="130" height="90" rx="2" fill="#E8E2D4" opacity="0.8" />
+      <rect x="330" y="170" width="120" height="120" rx="2" fill="#E8E2D4" opacity="0.8" />
+      <rect x="470" y="180" width="100" height="90" rx="2" fill="#E8E2D4" opacity="0.8" />
+      <rect x="70" y="330" width="110" height="120" rx="2" fill="#E8E2D4" opacity="0.8" />
+      <rect x="220" y="320" width="140" height="100" rx="2" fill="#E8E2D4" opacity="0.8" />
+      <rect x="390" y="330" width="160" height="120" rx="2" fill="#E8E2D4" opacity="0.8" />
+      <rect x="100" y="500" width="150" height="110" rx="2" fill="#E8E2D4" opacity="0.8" />
+      <rect x="300" y="500" width="180" height="100" rx="2" fill="#E8E2D4" opacity="0.8" />
 
       {routePath && (
         <path
@@ -202,12 +158,7 @@ export default function MapView({
       ))}
 
       {signals.map((item, i) => (
-        <SmallCircle
-          key={`signal-${i}`}
-          x={item.x}
-          y={item.y}
-          fill="#BA7517"
-        />
+        <SmallCircle key={`signal-${i}`} x={item.x} y={item.y} fill="#BA7517" />
       ))}
 
       {benches.map((item, i) => (
@@ -219,7 +170,7 @@ export default function MapView({
       ))}
 
       {visibleSites.map((site, index) => {
-        const isActive = selectedSite?.id === site.id && showPopup;
+        const isActive = selectedProjectedSite?.id === site.id && showPopup;
 
         return (
           <g
@@ -283,28 +234,18 @@ export default function MapView({
         />
       )}
 
-      {selectedSite && showPopup && (
+      {selectedProjectedSite && showPopup && (
         <circle
-          cx={selectedSite.x}
-          cy={selectedSite.y}
+          cx={selectedProjectedSite.x}
+          cy={selectedProjectedSite.y}
           r="10"
           fill="none"
           stroke="#7F77DD"
           strokeWidth="2"
           opacity="0.5"
         >
-          <animate
-            attributeName="r"
-            values="10;16;10"
-            dur="2s"
-            repeatCount="indefinite"
-          />
-          <animate
-            attributeName="opacity"
-            values="0.5;0;0.5"
-            dur="2s"
-            repeatCount="indefinite"
-          />
+          <animate attributeName="r" values="10;16;10" dur="2s" repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0.5;0;0.5" dur="2s" repeatCount="indefinite" />
         </circle>
       )}
     </svg>
