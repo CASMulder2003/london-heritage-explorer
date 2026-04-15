@@ -13,12 +13,16 @@ import {
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 const LONDON_CENTER = [-0.131, 51.5205];
 
-function createHeritageMarker(isActive = false, isEndpoint = false) {
+function createHeritageMarker(
+  isActive = false,
+  isEndpoint = false,
+  isMuted = false
+) {
   const el = document.createElement("button");
   el.type = "button";
   el.className = `heritage-marker${isActive ? " active" : ""}${
     isEndpoint ? " endpoint" : ""
-  }`;
+  }${isMuted ? " muted" : ""}`;
   el.setAttribute("aria-label", "Heritage site marker");
   return el;
 }
@@ -78,60 +82,148 @@ function buildFallbackRoute(
   };
 }
 
-function getFeatureGroups(routeType) {
-  if (routeType === "adventure") {
-    return [
-      { key: "tree", label: "Trees", items: trees.slice(0, 6), type: "tree" },
-      { key: "bus", label: "Bus stops", items: busStops.slice(0, 5), type: "bus" },
-      { key: "signal", label: "Signals", items: signals.slice(0, 4), type: "signal" },
-      { key: "bench", label: "Benches", items: benches.slice(0, 4), type: "bench" },
-      { key: "lamp", label: "Lamps", items: lamps.slice(0, 5), type: "lamp" },
-    ];
-  }
-
-  return [
-    { key: "tree", label: "Trees", items: trees.slice(0, 3), type: "tree" },
-    { key: "bus", label: "Bus stops", items: busStops.slice(0, 2), type: "bus" },
-    { key: "signal", label: "Signals", items: signals.slice(0, 2), type: "signal" },
-    { key: "bench", label: "Benches", items: benches.slice(0, 1), type: "bench" },
-    { key: "lamp", label: "Lamps", items: lamps.slice(0, 2), type: "lamp" },
-  ];
-}
-
 function getRoutePaint(routeType) {
   if (routeType === "adventure") {
     return {
-      color: "#5B4FE5",
-      width: 7,
-      opacity: 0.95,
-      dasharray: [2, 1.4],
-      glowOpacity: 0.18,
+      color: "#7c8799",
+      width: 4,
+      opacity: 0.5,
+      dasharray: [2, 2],
+      glowOpacity: 0.08,
     };
   }
 
   return {
-    color: "#2F6BFF",
-    width: 5,
-    opacity: 0.94,
-    dasharray: [1, 0],
-    glowOpacity: 0.14,
+    color: "#8b95a7",
+    width: 3,
+    opacity: 0.42,
+    dasharray: [1.5, 1.5],
+    glowOpacity: 0.06,
   };
 }
+
 
 function getNarrativeCopy(routeType, travelMode) {
   const modeLabel = travelMode === "cycle" ? "cycle" : "walk";
 
   if (routeType === "adventure") {
     return {
-      title: "Story-rich journey",
-      description: `This ${modeLabel} route expands across the corridor to include more heritage stops, encouraging a slower and more exploratory reading of the city.`,
+      title: "Cue-rich discovery route",
+      description: `This ${modeLabel} route stretches across a wider corridor, using more environmental cues and heritage stops to encourage slower exploration.`,
     };
   }
 
   return {
-    title: "Fast heritage connection",
-    description: `This ${modeLabel} route prioritises a shorter and clearer connection between the selected landmarks while preserving a minimal heritage narrative.`,
+    title: "Focused cultural connection",
+    description: `This ${modeLabel} route keeps the journey legible and efficient while still surfacing key spatial cues and nearby heritage context.`,
+    };
+}
+
+function projectMeters(lng, lat) {
+  const x = lng * 111320 * Math.cos((lat * Math.PI) / 180);
+  const y = lat * 110540;
+  return [x, y];
+}
+
+function pointToSegmentDistanceMeters(point, start, end) {
+  const [px, py] = projectMeters(point[0], point[1]);
+  const [x1, y1] = projectMeters(start[0], start[1]);
+  const [x2, y2] = projectMeters(end[0], end[1]);
+
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+
+  if (dx === 0 && dy === 0) {
+    return Math.hypot(px - x1, py - y1);
+  }
+
+  const t = Math.max(
+    0,
+    Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy))
+  );
+
+  const nearestX = x1 + t * dx;
+  const nearestY = y1 + t * dy;
+
+  return Math.hypot(px - nearestX, py - nearestY);
+}
+
+function isPointNearRoute(point, coordinates, thresholdMeters = 120) {
+  if (!coordinates || coordinates.length < 2) return false;
+
+  for (let i = 0; i < coordinates.length - 1; i += 1) {
+    const distance = pointToSegmentDistanceMeters(
+      point,
+      coordinates[i],
+      coordinates[i + 1]
+    );
+
+    if (distance <= thresholdMeters) return true;
+  }
+
+  return false;
+}
+
+function buildCueGroups(routeType, routeFeature) {
+  const routeCoordinates = routeFeature?.geometry?.coordinates || [];
+
+  const isAdventure = routeType === "adventure";
+
+  const thresholds = {
+    tree: isAdventure ? 160 : 110,
+    bus: isAdventure ? 140 : 90,
+    signal: isAdventure ? 120 : 80,
+    bench: isAdventure ? 150 : 100,
+    lamp: isAdventure ? 130 : 85,
   };
+
+  const limits = {
+    tree: isAdventure ? 14 : 8,
+    bus: isAdventure ? 10 : 5,
+    signal: isAdventure ? 10 : 5,
+    bench: isAdventure ? 8 : 4,
+    lamp: isAdventure ? 8 : 4,
+  };
+
+  const filterNearRoute = (items, threshold, limit) =>
+    items
+      .filter((item) =>
+        isPointNearRoute([item.lng, item.lat], routeCoordinates, threshold)
+      )
+      .slice(0, limit);
+
+  return [
+    {
+      key: "tree",
+      label: "Shade cues",
+      items: filterNearRoute(trees, thresholds.tree, limits.tree),
+      type: "tree",
+    },
+    {
+      key: "bus",
+      label: "Transit cues",
+      items: filterNearRoute(busStops, thresholds.bus, limits.bus),
+      type: "bus",
+    },
+    {
+      key: "signal",
+      label: "Crossing cues",
+      items: filterNearRoute(signals, thresholds.signal, limits.signal),
+      type: "signal",
+    },
+    {
+      key: "bench",
+      label: "Rest points",
+      items: filterNearRoute(benches, thresholds.bench, limits.bench),
+      type: "bench",
+    },
+    {
+      key: "lamp",
+      label: "Street rhythm",
+      items: filterNearRoute(lamps, thresholds.lamp, limits.lamp),
+      type: "lamp",
+    },
+  ];
 }
 
 export default function MapView({
@@ -151,6 +243,7 @@ export default function MapView({
   const heritageMarkersRef = useRef([]);
   const featureMarkersRef = useRef([]);
   const [mapReady, setMapReady] = useState(false);
+  const [currentRoute, setCurrentRoute] = useState(null);
 
   const [activePopupSite, setActivePopupSite] = useState(null);
   const [visibleLayers, setVisibleLayers] = useState({
@@ -167,7 +260,6 @@ export default function MapView({
     [travelMode]
   );
 
-  const featureGroups = useMemo(() => getFeatureGroups(routeType), [routeType]);
   const routePaint = useMemo(() => getRoutePaint(routeType), [routeType]);
   const narrativeCopy = useMemo(
     () => getNarrativeCopy(routeType, travelMode),
@@ -186,11 +278,21 @@ export default function MapView({
           site.featured === true
       );
 
-      return filtered.length >= 2 ? filtered : heritageSites.slice(0, 3);
+      return filtered.length >= 2 ? filtered : heritageSites.slice(0, 4);
     }
 
     return heritageSites;
   }, [heritageSites, routeType, startSite, endSite]);
+
+  const cueGroups = useMemo(
+    () => buildCueGroups(routeType, currentRoute),
+    [routeType, currentRoute]
+  );
+
+  const cueCount = useMemo(
+    () => cueGroups.reduce((sum, group) => sum + group.items.length, 0),
+    [cueGroups]
+  );
 
   useEffect(() => {
     if (!MAPBOX_TOKEN || mapRef.current || !mapContainerRef.current) return;
@@ -254,6 +356,7 @@ export default function MapView({
         },
       });
 
+
       setMapReady(true);
     });
 
@@ -267,6 +370,7 @@ export default function MapView({
       featureMarkersRef.current = [];
 
       setMapReady(false);
+      setCurrentRoute(null);
       map.remove();
       mapRef.current = null;
     };
@@ -342,7 +446,7 @@ export default function MapView({
     featureMarkersRef.current.forEach((marker) => marker.remove());
     featureMarkersRef.current = [];
 
-    featureGroups.forEach(({ items, type, key }) => {
+    cueGroups.forEach(({ items, type, key }) => {
       if (!visibleLayers[key]) return;
 
       items.forEach((item) => {
@@ -358,7 +462,7 @@ export default function MapView({
         featureMarkersRef.current.push(marker);
       });
     });
-  }, [featureGroups, mapReady, visibleLayers]);
+  }, [cueGroups, mapReady, visibleLayers]);
 
   useEffect(() => {
     const focusSite = selectedHeritage || activePopupSite;
@@ -424,6 +528,8 @@ export default function MapView({
           source.setData(routeGeoJSON);
         }
 
+        setCurrentRoute(routeGeoJSON);
+
         const bounds = new mapboxgl.LngLatBounds();
         routeGeoJSON.geometry.coordinates.forEach((coord) => bounds.extend(coord));
 
@@ -450,6 +556,8 @@ export default function MapView({
         if (source) {
           source.setData(fallbackRoute);
         }
+
+        setCurrentRoute(fallbackRoute);
 
         const bounds = new mapboxgl.LngLatBounds();
         fallbackRoute.geometry.coordinates.forEach((coord) => bounds.extend(coord));
@@ -498,7 +606,7 @@ export default function MapView({
 
       <div className="map-overlay bottom-left">
         <div className="map-legend">
-          <div className="legend-title">Layers</div>
+          <div className="legend-title">Spatial cues</div>
 
           <button
             type="button"
@@ -512,7 +620,7 @@ export default function MapView({
           >
             <span className="legend-row">
               <span className="legend-dot heritage" />
-              <span>Heritage</span>
+              <span>Heritage anchors</span>
             </span>
           </button>
 
@@ -528,7 +636,7 @@ export default function MapView({
           >
             <span className="legend-row">
               <span className="legend-dot bus" />
-              <span>Bus stops</span>
+              <span>Transit cues</span>
             </span>
           </button>
 
@@ -544,7 +652,7 @@ export default function MapView({
           >
             <span className="legend-row">
               <span className="legend-dot tree" />
-              <span>Trees</span>
+              <span>Shade cues</span>
             </span>
           </button>
 
@@ -560,7 +668,7 @@ export default function MapView({
           >
             <span className="legend-row">
               <span className="legend-dot bench" />
-              <span>Benches</span>
+              <span>Rest points</span>
             </span>
           </button>
 
@@ -576,7 +684,7 @@ export default function MapView({
           >
             <span className="legend-row">
               <span className="legend-dot signal" />
-              <span>Signals</span>
+              <span>Crossing cues</span>
             </span>
           </button>
 
@@ -592,7 +700,7 @@ export default function MapView({
           >
             <span className="legend-row">
               <span className="legend-dot lamp" />
-              <span>Lamps</span>
+              <span>Street rhythm</span>
             </span>
           </button>
         </div>
@@ -606,6 +714,7 @@ export default function MapView({
           <div className="story-stats">
             <span>{stats?.distance || "—"}</span>
             <span>{stats?.heritageStops || visibleHeritageSites.length} stops</span>
+            <span>{cueCount} cues</span>
             <span>{stats?.durationText || `${timeMinutes} min`}</span>
           </div>
         </div>
@@ -632,11 +741,11 @@ export default function MapView({
           </div>
 
           <div className="popup-img">Story stop</div>
-          <div className="popup-meta">Heritage stop</div>
+          <div className="popup-meta">Heritage anchor</div>
           <div className="popup-name">{popupSite.name}</div>
           <div className="popup-desc">
             {popupSite.description ||
-              "This stop adds historical context to the route and helps frame the journey as a spatial story rather than a simple connection."}
+              "This stop adds cultural context to the route and helps frame the journey as a spatial story rather than a simple connection."}
           </div>
 
           <button

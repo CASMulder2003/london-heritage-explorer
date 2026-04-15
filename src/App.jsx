@@ -50,33 +50,192 @@ function getAdventureStopCount(timeMinutes) {
   return heritageSites.length;
 }
 
+function pointToSegmentDistance(site, startSite, endSite) {
+  const x = site.lng;
+  const y = site.lat;
+  const x1 = startSite.lng;
+  const y1 = startSite.lat;
+  const x2 = endSite.lng;
+  const y2 = endSite.lat;
+
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+
+  if (dx === 0 && dy === 0) {
+    return Math.sqrt((x - x1) ** 2 + (y - y1) ** 2);
+  }
+
+  const t = Math.max(
+    0,
+    Math.min(1, ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy))
+  );
+
+  const nearestX = x1 + t * dx;
+  const nearestY = y1 + t * dy;
+
+  return Math.sqrt((x - nearestX) ** 2 + (y - nearestY) ** 2);
+}
+
+function pointProgressAlongSegment(site, startSite, endSite) {
+  const x = site.lng;
+  const y = site.lat;
+  const x1 = startSite.lng;
+  const y1 = startSite.lat;
+  const x2 = endSite.lng;
+  const y2 = endSite.lat;
+
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+
+  if (dx === 0 && dy === 0) return 0;
+
+  return ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy);
+}
+
 function getVisibleHeritageSites(start, end, routeType, timeMinutes) {
   const startSite = findSiteByName(start);
   const endSite = findSiteByName(end);
 
   if (!startSite || !endSite) return heritageSites;
 
-  const coreSites = heritageSites.filter(
-    (site) =>
-      site.name === start ||
-      site.name === end ||
-      site.name === "British Museum"
-  );
-
   if (routeType === "direct") {
-    return coreSites;
+    return heritageSites.filter(
+      (site) => site.name === start || site.name === end
+    );
   }
 
+  // --- Narrative presets for key commuting corridors ---
+  const presetRoutes = {
+    "Camden Lock->Senate House": [
+      "Camden Lock",
+      "British Library",
+      "The Foundling Museum",
+      "Charles Dickens Museum",
+      "Senate House",
+    ],
+    "Camden Lock->British Museum": [
+      "Camden Lock",
+      "British Library",
+      "The Foundling Museum",
+      "British Museum",
+    ],
+    "St Pancras Old Church->Senate House": [
+      "St Pancras Old Church",
+      "British Library",
+      "The Foundling Museum",
+      "Charles Dickens Museum",
+      "Senate House",
+    ],
+    "St Pancras Old Church->British Museum": [
+      "St Pancras Old Church",
+      "British Library",
+      "The Foundling Museum",
+      "British Museum",
+    ],
+  };
+
+  const presetKey = `${start}->${end}`;
+  const presetNames = presetRoutes[presetKey];
+
+  if (presetNames) {
+    const maxStops = getAdventureStopCount(timeMinutes);
+
+    const orderedPresetSites = presetNames
+      .map((name) => findSiteByName(name))
+      .filter(Boolean);
+
+    // 根据 timeMinutes 截断，但始终保留起点和终点
+    if (orderedPresetSites.length <= 2) {
+      return orderedPresetSites;
+    }
+
+    const targetCount = Math.max(2, maxStops);
+    if (orderedPresetSites.length <= targetCount) {
+      return orderedPresetSites;
+    }
+
+    const middleSites = orderedPresetSites.slice(1, -1);
+    const middleTarget = Math.max(0, targetCount - 2);
+    const sampledMiddle = [];
+
+    for (let i = 1; i <= middleTarget; i += 1) {
+      const index = Math.floor((i / (middleTarget + 1)) * middleSites.length);
+      if (middleSites[index]) {
+        const alreadyIncluded = sampledMiddle.some(
+          (site) => site.name === middleSites[index].name
+        );
+        if (!alreadyIncluded) {
+          sampledMiddle.push(middleSites[index]);
+        }
+      }
+    }
+
+    return [orderedPresetSites[0], ...sampledMiddle, orderedPresetSites.at(-1)];
+  }
+
+  // --- Generic fallback for all other routes ---
   const maxStops = getAdventureStopCount(timeMinutes);
 
-  const additionalSites = heritageSites.filter(
-    (site) => site.name !== start && site.name !== end
-  );
+  const additionalSites = heritageSites
+    .filter(
+      (site) =>
+        site.name !== start &&
+        site.name !== end &&
+        site.adventure !== false
+    )
+    .map((site) => {
+      const corridorDistance = pointToSegmentDistance(site, startSite, endSite);
+      const progress = pointProgressAlongSegment(site, startSite, endSite);
 
-  return [startSite, ...additionalSites.slice(0, Math.max(0, maxStops - 2)), endSite];
+      const startIsCamden = start === "Camden Lock";
+      const cueWeight = site.cueWeight || 0;
+
+      const baseDistance = startIsCamden
+        ? corridorDistance * 0.7 + Math.abs(progress - 0.5) * 0.01
+        : corridorDistance;
+
+      const adjustedDistance = baseDistance - cueWeight * 0.002;
+
+      return {
+        ...site,
+        corridorDistance: adjustedDistance,
+        progress,
+      };
+    })
+    .filter(
+      (site) =>
+        site.progress > 0.05 &&
+        site.progress < 0.95 &&
+        site.corridorDistance < 0.025
+    )
+    .sort((a, b) => a.progress - b.progress);
+
+  const targetCount = Math.max(0, maxStops - 2);
+  const sampledSites = [];
+
+  for (let i = 1; i <= targetCount; i += 1) {
+    const index = Math.floor((i / (targetCount + 1)) * additionalSites.length);
+    if (additionalSites[index]) {
+      const alreadyIncluded = sampledSites.some(
+        (site) => site.name === additionalSites[index].name
+      );
+      if (!alreadyIncluded) {
+        sampledSites.push(additionalSites[index]);
+      }
+    }
+  }
+
+  return [startSite, ...sampledSites, endSite];
 }
 
-function buildStats(startSite, endSite, travelMode, routeType, timeMinutes, visibleSites) {
+function buildStats(
+  startSite,
+  endSite,
+  travelMode,
+  routeType,
+  timeMinutes,
+  visibleSites
+) {
   const distanceKm = estimateDistanceKm(startSite, endSite, routeType);
   const estimatedDuration = estimateDurationMinutes(distanceKm, travelMode);
 
@@ -110,10 +269,22 @@ export default function App() {
   const [timeMinutes, setTimeMinutes] = useState(90);
   const [selectedHeritage, setSelectedHeritage] = useState(null);
 
-  const safeRouteType = useMemo(() => normalizeRouteType(routeType), [routeType]);
-  const safeTravelMode = useMemo(() => normalizeTravelMode(travelMode), [travelMode]);
+  const safeRouteType = useMemo(
+    () => normalizeRouteType(routeType),
+    [routeType]
+  );
+  const safeTravelMode = useMemo(
+    () => normalizeTravelMode(travelMode),
+    [travelMode]
+  );
 
-  const locations = useMemo(() => heritageSites.map((site) => site.name), []);
+  const locations = useMemo(
+    () =>
+      heritageSites
+        .filter((site) => site.startEnd !== false)
+        .map((site) => site.name),
+    []
+  );
 
   const startSite = useMemo(() => findSiteByName(start), [start]);
   const endSite = useMemo(() => findSiteByName(end), [end]);

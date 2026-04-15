@@ -42,14 +42,14 @@ function StoryCard({ index, site, selectedHeritage, onSelectHeritage }) {
     >
       <div className="story-card-top">
         <span className="story-index">{index + 1}</span>
-        <span className="story-tag">Heritage stop</span>
+        <span className="story-tag">Narrative anchor</span>
       </div>
 
       <h4 className="story-title">{site.name}</h4>
 
       <p className="story-description">
         {site.description ||
-          "A heritage point along the selected journey, included to support spatial storytelling and route discovery."}
+          "A spatial anchor that helps structure how this journey is experienced and remembered."}
       </p>
     </article>
   );
@@ -249,8 +249,8 @@ export default function Sidebar({
 
             <div className="route-mode-note">
               {routeType === "direct"
-                ? "Direct prioritises a shorter and clearer connection between selected landmarks."
-                : "Adventure expands the journey to include more heritage storytelling stops and supporting city features."}
+              ? "A more legible route that relies on fewer but clearer spatial cues."
+              : "A slower, exploratory route that reveals more cues and heritage moments along the way."}
             </div>
           </SidebarSection>
 
@@ -289,23 +289,23 @@ export default function Sidebar({
               value={routeSummary.heritageStops}
             />
             <SummaryRow
-              label="Urban features"
+              label="Spatial cues"
               value={routeSummary.urbanFeatures}
             />
 
             <div className="route-note">
-              {routeType === "direct"
-                ? "Best for a fast and legible route between key heritage landmarks."
-                : "Best for a story-led journey that expands with time and reveals more of the urban corridor."}
-            </div>
+             {routeType === "direct"
+             ? "Follows a clear spatial sequence using key cues and landmarks to support legible movement."
+             : "Encourages exploratory movement through a richer set of spatial cues and heritage anchors."}
+           </div>
           </SidebarSection>
 
           <SidebarSection title="Story preview">
             <div className="story-preview-header">
               <div className="story-preview-title">
                 {routeType === "adventure"
-                  ? "Narrative stops on this route"
-                  : "Key stops on this route"}
+                  ? "Spatial narrative sequence"
+                  : "Key narrative moments"}
               </div>
               <div className="story-preview-meta">
                 {storyPreviewSites.length} visible
