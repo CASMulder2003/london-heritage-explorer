@@ -2,13 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
-import {
-  trees,
-  busStops,
-  signals,
-  benches,
-  lamps,
-} from "../data/mapFeatures";
+import { cues, cueCategories } from "../data/cues";
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 const LONDON_CENTER = [-0.131, 51.5205];
@@ -27,9 +21,9 @@ function createHeritageMarker(
   return el;
 }
 
-function createFeatureMarker(type) {
+function createFeatureMarker(type, prominence = 1, size = "support") {
   const el = document.createElement("div");
-  el.className = `map-feature-marker ${type}`;
+  el.className = `map-feature-marker ${type} prominence-${prominence} size-${size}`;
   return el;
 }
 
@@ -86,10 +80,10 @@ function getRoutePaint(routeType) {
   if (routeType === "adventure") {
     return {
       color: "#7c8799",
-      width: 4,
-      opacity: 0.5,
+      width: 2,
+      opacity: 0.12,
       dasharray: [2, 2],
-      glowOpacity: 0.08,
+      glowOpacity: 0,
     };
   }
 
@@ -102,21 +96,20 @@ function getRoutePaint(routeType) {
   };
 }
 
-
 function getNarrativeCopy(routeType, travelMode) {
   const modeLabel = travelMode === "cycle" ? "cycle" : "walk";
 
   if (routeType === "adventure") {
     return {
-      title: "Cue-rich discovery route",
-      description: `This ${modeLabel} route stretches across a wider corridor, using more environmental cues and heritage stops to encourage slower exploration.`,
+      title: "Cue-led exploration",
+      description: `This ${modeLabel} journey foregrounds environmental cues and a smaller sequence of story stops, encouraging interpretation rather than strict turn-by-turn following.`,
     };
   }
 
   return {
     title: "Focused cultural connection",
     description: `This ${modeLabel} route keeps the journey legible and efficient while still surfacing key spatial cues and nearby heritage context.`,
-    };
+  };
 }
 
 function projectMeters(lng, lat) {
@@ -148,6 +141,66 @@ function pointToSegmentDistanceMeters(point, start, end) {
   return Math.hypot(px - nearestX, py - nearestY);
 }
 
+function pointProgressAlongPolyline(point, coordinates) {
+  if (!coordinates || coordinates.length < 2) return 0;
+
+  const [px, py] = projectMeters(point[0], point[1]);
+
+  let totalLength = 0;
+  const segmentLengths = [];
+
+  for (let i = 0; i < coordinates.length - 1; i += 1) {
+    const [x1, y1] = projectMeters(coordinates[i][0], coordinates[i][1]);
+    const [x2, y2] = projectMeters(
+      coordinates[i + 1][0],
+      coordinates[i + 1][1]
+    );
+    const segLen = Math.hypot(x2 - x1, y2 - y1);
+    segmentLengths.push(segLen);
+    totalLength += segLen;
+  }
+
+  if (totalLength === 0) return 0;
+
+  let bestDistance = Infinity;
+  let bestProgress = 0;
+  let traversed = 0;
+
+  for (let i = 0; i < coordinates.length - 1; i += 1) {
+    const [x1, y1] = projectMeters(coordinates[i][0], coordinates[i][1]);
+    const [x2, y2] = projectMeters(
+      coordinates[i + 1][0],
+      coordinates[i + 1][1]
+    );
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const segLen = segmentLengths[i];
+
+    if (segLen === 0) {
+      traversed += segLen;
+      continue;
+    }
+
+    const t = Math.max(
+      0,
+      Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy))
+    );
+
+    const nearestX = x1 + t * dx;
+    const nearestY = y1 + t * dy;
+    const distance = Math.hypot(px - nearestX, py - nearestY);
+
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestProgress = (traversed + segLen * t) / totalLength;
+    }
+
+    traversed += segLen;
+  }
+
+  return bestProgress;
+}
+
 function isPointNearRoute(point, coordinates, thresholdMeters = 120) {
   if (!coordinates || coordinates.length < 2) return false;
 
@@ -164,66 +217,184 @@ function isPointNearRoute(point, coordinates, thresholdMeters = 120) {
   return false;
 }
 
+function dedupeById(items) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = item.id || `${item.lng}-${item.lat}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function pickDistributed(items, count) {
+  if (items.length <= count) return items;
+  if (count <= 0) return [];
+
+  const picked = [];
+  for (let i = 0; i < count; i += 1) {
+    const index = Math.floor((i * items.length) / count);
+    if (items[index]) picked.push(items[index]);
+  }
+  return dedupeById(picked);
+}
+
 function buildCueGroups(routeType, routeFeature) {
   const routeCoordinates = routeFeature?.geometry?.coordinates || [];
-
   const isAdventure = routeType === "adventure";
 
   const thresholds = {
-    tree: isAdventure ? 160 : 110,
-    bus: isAdventure ? 140 : 90,
-    signal: isAdventure ? 120 : 80,
-    bench: isAdventure ? 150 : 100,
-    lamp: isAdventure ? 130 : 85,
+    heritage: isAdventure ? 260 : 160,
+    transit: isAdventure ? 180 : 100,
+    shade: isAdventure ? 220 : 120,
+    rest: isAdventure ? 190 : 100,
+    crossing: isAdventure ? 160 : 90,
+    rhythm: isAdventure ? 170 : 95,
+    lighting: isAdventure ? 190 : 105,
+    threshold: isAdventure ? 180 : 100,
+    water: isAdventure ? 260 : 150,
   };
 
   const limits = {
-    tree: isAdventure ? 14 : 8,
-    bus: isAdventure ? 10 : 5,
-    signal: isAdventure ? 10 : 5,
-    bench: isAdventure ? 8 : 4,
-    lamp: isAdventure ? 8 : 4,
+    heritage: isAdventure ? 6 : 4,
+    transit: isAdventure ? 8 : 5,
+    shade: isAdventure ? 12 : 6,
+    rest: isAdventure ? 6 : 4,
+    crossing: isAdventure ? 8 : 5,
+    rhythm: isAdventure ? 6 : 4,
+    lighting: isAdventure ? 7 : 4,
+    threshold: isAdventure ? 5 : 3,
+    water: isAdventure ? 4 : 2,
   };
 
-  const filterNearRoute = (items, threshold, limit) =>
-    items
+  function prepareItems(items, threshold) {
+    if (!routeCoordinates || routeCoordinates.length < 2) return [];
+
+    return items
       .filter((item) =>
         isPointNearRoute([item.lng, item.lat], routeCoordinates, threshold)
       )
+      .map((item) => ({
+        ...item,
+        progress: pointProgressAlongPolyline(
+          [item.lng, item.lat],
+          routeCoordinates
+        ),
+      }));
+  }
+
+  return cueCategories.map((category) => {
+    const prepared = prepareItems(
+      cues.filter((item) => item.type === category.key),
+      thresholds[category.key] || 120
+    );
+
+    const sorted = [...prepared].sort((a, b) => a.progress - b.progress);
+    const limit = limits[category.key] || sorted.length;
+
+    const bins = [[], [], [], []];
+    sorted.forEach((item) => {
+      if (item.progress < 0.25) bins[0].push(item);
+      else if (item.progress < 0.5) bins[1].push(item);
+      else if (item.progress < 0.75) bins[2].push(item);
+      else bins[3].push(item);
+    });
+
+    const picked = bins
+      .flatMap((bin) =>
+        pickDistributed(bin, Math.max(1, Math.ceil(limit / 4)))
+      )
       .slice(0, limit);
 
-  return [
-    {
-      key: "tree",
-      label: "Shade cues",
-      items: filterNearRoute(trees, thresholds.tree, limits.tree),
-      type: "tree",
-    },
-    {
-      key: "bus",
-      label: "Transit cues",
-      items: filterNearRoute(busStops, thresholds.bus, limits.bus),
-      type: "bus",
-    },
-    {
-      key: "signal",
-      label: "Crossing cues",
-      items: filterNearRoute(signals, thresholds.signal, limits.signal),
-      type: "signal",
-    },
-    {
-      key: "bench",
-      label: "Rest points",
-      items: filterNearRoute(benches, thresholds.bench, limits.bench),
-      type: "bench",
-    },
-    {
-      key: "lamp",
-      label: "Street rhythm",
-      items: filterNearRoute(lamps, thresholds.lamp, limits.lamp),
-      type: "lamp",
-    },
-  ];
+    return {
+      key: category.key,
+      label: category.label,
+      items: picked,
+      type: category.key,
+      color: category.color,
+    };
+  });
+}
+
+function interpolatePointsAlongRoute(coordinates, steps = 18) {
+  if (!coordinates || coordinates.length < 2) return [];
+
+  const result = [];
+  const totalSegments = coordinates.length - 1;
+
+  for (let i = 0; i < steps; i += 1) {
+    const t = i / (steps - 1);
+    const segmentFloat = t * totalSegments;
+    const segmentIndex = Math.min(
+      totalSegments - 1,
+      Math.floor(segmentFloat)
+    );
+    const localT = segmentFloat - segmentIndex;
+
+    const start = coordinates[segmentIndex];
+    const end = coordinates[segmentIndex + 1];
+
+    const lng = start[0] + (end[0] - start[0]) * localT;
+    const lat = start[1] + (end[1] - start[1]) * localT;
+
+    result.push([lng, lat]);
+  }
+
+  return result;
+}
+
+function buildCueCorridorGeoJSON(cueGroups, routeFeature, routeType) {
+  const features = [];
+
+  cueGroups.forEach((group) => {
+    group.items.forEach((item) => {
+      features.push({
+        type: "Feature",
+        properties: {
+          type: group.key,
+          generated: false,
+        },
+        geometry: {
+          type: "Point",
+          coordinates: [item.lng, item.lat],
+        },
+      });
+    });
+  });
+
+  const coordinates = routeFeature?.geometry?.coordinates || [];
+  if (coordinates.length >= 2) {
+    const generatedPoints = interpolatePointsAlongRoute(
+      coordinates,
+      routeType === "adventure" ? 18 : 12
+    );
+
+    const generatedTypes =
+      routeType === "adventure"
+        ? ["shade", "lighting", "rhythm", "threshold", "water"]
+        : ["transit", "crossing", "shade"];
+
+    generatedPoints.forEach((coord, index) => {
+      const type = generatedTypes[index % generatedTypes.length];
+
+      features.push({
+        type: "Feature",
+        properties: {
+          type,
+          generated: true,
+        },
+        geometry: {
+          type: "Point",
+          coordinates: coord,
+        },
+      });
+    });
+  }
+
+  return {
+    type: "FeatureCollection",
+    features,
+  };
 }
 
 export default function MapView({
@@ -244,15 +415,18 @@ export default function MapView({
   const featureMarkersRef = useRef([]);
   const [mapReady, setMapReady] = useState(false);
   const [currentRoute, setCurrentRoute] = useState(null);
-
   const [activePopupSite, setActivePopupSite] = useState(null);
+
   const [visibleLayers, setVisibleLayers] = useState({
     heritage: true,
-    bus: true,
-    tree: true,
-    bench: true,
-    signal: true,
-    lamp: false,
+    transit: true,
+    shade: true,
+    rest: true,
+    crossing: true,
+    rhythm: true,
+    lighting: true,
+    threshold: true,
+    water: true,
   });
 
   const routeProfile = useMemo(
@@ -267,23 +441,79 @@ export default function MapView({
   );
 
   const visibleHeritageSites = useMemo(() => {
-    if (!startSite || !endSite) return heritageSites;
-
+    if (!startSite || !endSite) return [];
+  
+    const startAndEnd = [startSite, endSite].filter(Boolean);
+  
     if (routeType === "direct") {
-      const filtered = heritageSites.filter(
-        (site) =>
-          site.name === startSite.name ||
-          site.name === endSite.name ||
-          site.priority === "primary" ||
-          site.featured === true
+      return startAndEnd.filter(
+        (site, index, arr) =>
+          arr.findIndex((s) => s.name === site.name) === index
       );
-
-      return filtered.length >= 2 ? filtered : heritageSites.slice(0, 4);
     }
-
-    return heritageSites;
+  
+    const otherSites = heritageSites
+      .filter(
+        (site) =>
+          site.name !== startSite.name &&
+          site.name !== endSite.name &&
+          site.adventure
+      )
+      .map((site) => {
+        const distToStart = Math.hypot(
+          site.lng - startSite.lng,
+          site.lat - startSite.lat
+        );
+        const distToEnd = Math.hypot(
+          site.lng - endSite.lng,
+          site.lat - endSite.lat
+        );
+  
+        return {
+          ...site,
+          distToStart,
+          distToEnd,
+        };
+      })
+      .filter((site) => site.distToStart > 0.004 && site.distToEnd > 0.004)
+      .sort((a, b) => {
+        if ((b.cueWeight || 0) !== (a.cueWeight || 0)) {
+          return (b.cueWeight || 0) - (a.cueWeight || 0);
+        }
+        return (
+          Math.min(a.distToStart, a.distToEnd) -
+          Math.min(b.distToStart, b.distToEnd)
+        );
+      });
+  
+    const routeLength = Math.hypot(
+      endSite.lng - startSite.lng,
+      endSite.lat - startSite.lat
+    );
+  
+    const middleCount = routeLength < 0.02 ? 1 : 2;
+  
+    const middleAnchors = [];
+    for (const site of otherSites) {
+      const tooCloseToExisting = middleAnchors.some(
+        (picked) =>
+          Math.hypot(site.lng - picked.lng, site.lat - picked.lat) < 0.005
+      );
+  
+      if (!tooCloseToExisting) {
+        middleAnchors.push(site);
+      }
+  
+      if (middleAnchors.length >= middleCount) break;
+    }
+  
+    return [...startAndEnd, ...middleAnchors].filter(
+      (site, index, arr) =>
+        arr.findIndex((s) => s.name === site.name) === index
+    );
   }, [heritageSites, routeType, startSite, endSite]);
 
+  
   const cueGroups = useMemo(
     () => buildCueGroups(routeType, currentRoute),
     [routeType, currentRoute]
@@ -301,7 +531,7 @@ export default function MapView({
 
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
-      style: "mapbox://styles/mapbox/streets-v12",
+      style: "mapbox://styles/mapbox/light-v11",
       center: LONDON_CENTER,
       zoom: 12.8,
       attributionControl: false,
@@ -325,6 +555,51 @@ export default function MapView({
         },
       });
 
+      map.addSource("cue-points", {
+        type: "geojson",
+        data: {
+          type: "FeatureCollection",
+          features: [],
+        },
+      });
+
+      map.addLayer({
+        id: "cue-halo",
+        type: "circle",
+        source: "cue-points",
+        paint: {
+          "circle-radius": [
+            "match",
+            ["get", "type"],
+            "shade", 34,
+            "water", 30,
+            "lighting", 22,
+            "transit", 18,
+            "crossing", 16,
+            "rest", 15,
+            "threshold", 18,
+            "rhythm", 16,
+            16,
+          ],
+          "circle-color": [
+            "match",
+            ["get", "type"],
+            "shade", "#34C759",
+            "water", "#36B5D8",
+            "lighting", "#F4B942",
+            "transit", "#3B82F6",
+            "crossing", "#E74C3C",
+            "rest", "#A2846A",
+            "threshold", "#FF7AA2",
+            "rhythm", "#C58B00",
+            "#999999",
+          ],
+          "circle-opacity": 0.18,
+          "circle-blur": 1.0,
+          "circle-stroke-width": 0,
+        },
+      });
+
       map.addLayer({
         id: "route-line-glow",
         type: "line",
@@ -337,6 +612,7 @@ export default function MapView({
         layout: {
           "line-cap": "round",
           "line-join": "round",
+          visibility: routeType === "direct" ? "visible" : "none",
         },
       });
 
@@ -346,16 +622,16 @@ export default function MapView({
         source: "route",
         paint: {
           "line-color": routePaint.color,
-          "line-width": routePaint.width,
+          "line-width": routePaint.width + 2,
           "line-opacity": routePaint.opacity,
           "line-dasharray": routePaint.dasharray,
         },
         layout: {
           "line-cap": "round",
           "line-join": "round",
+          visibility: routeType === "direct" ? "visible" : "none",
         },
       });
-
 
       setMapReady(true);
     });
@@ -374,7 +650,14 @@ export default function MapView({
       map.remove();
       mapRef.current = null;
     };
-  }, [routePaint]);
+  }, [
+    routePaint.color,
+    routePaint.width,
+    routePaint.opacity,
+    routePaint.glowOpacity,
+    routePaint.dasharray,
+    routeType,
+  ]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -382,11 +665,7 @@ export default function MapView({
     if (!map.getLayer("route-line") || !map.getLayer("route-line-glow")) return;
 
     map.setPaintProperty("route-line-glow", "line-color", routePaint.color);
-    map.setPaintProperty(
-      "route-line-glow",
-      "line-width",
-      routePaint.width + 6
-    );
+    map.setPaintProperty("route-line-glow", "line-width", routePaint.width + 6);
     map.setPaintProperty(
       "route-line-glow",
       "line-opacity",
@@ -397,7 +676,31 @@ export default function MapView({
     map.setPaintProperty("route-line", "line-width", routePaint.width);
     map.setPaintProperty("route-line", "line-opacity", routePaint.opacity);
     map.setPaintProperty("route-line", "line-dasharray", routePaint.dasharray);
-  }, [routePaint, mapReady]);
+
+    const visibility = routeType === "direct" ? "visible" : "none";
+    map.setLayoutProperty("route-line", "visibility", visibility);
+    map.setLayoutProperty("route-line-glow", "visibility", visibility);
+  }, [routePaint, routeType, mapReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+  
+    const source = map.getSource("cue-points");
+    if (!source) return;
+  
+    const visibleCueGroups = cueGroups
+      .filter((group) => visibleLayers[group.key])
+      .map((group) => ({
+        ...group,
+        items: group.items,
+      }));
+  
+    source.setData(
+      buildCueCorridorGeoJSON(visibleCueGroups, currentRoute, routeType)
+    );
+  }, [cueGroups, visibleLayers, currentRoute, routeType, mapReady]);
+
 
   useEffect(() => {
     const map = mapRef.current;
@@ -450,7 +753,11 @@ export default function MapView({
       if (!visibleLayers[key]) return;
 
       items.forEach((item) => {
-        const el = createFeatureMarker(type);
+        const el = createFeatureMarker(
+          type,
+          item.prominence || 1,
+          item.size || "support"
+        );
 
         const marker = new mapboxgl.Marker({
           element: el,
@@ -485,6 +792,10 @@ export default function MapView({
   }, [selectedHeritage]);
 
   useEffect(() => {
+    setActivePopupSite(null);
+  }, [startSite, endSite, routeType]);
+
+  useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !startSite || !endSite) return;
 
@@ -499,7 +810,7 @@ export default function MapView({
             .filter(
               (site) => site.name !== startSite.name && site.name !== endSite.name
             )
-            .slice(0, 3);
+            .slice(0, 1);
 
           if (viaSites.length > 0) {
             coordinatesForDirections = [
@@ -539,7 +850,7 @@ export default function MapView({
 
         map.fitBounds(bounds, {
           padding: { top: 100, right: 120, bottom: 110, left: 120 },
-          maxZoom: 14,
+          maxZoom: routeType === "adventure" ? 13.8 : 14,
           duration: 900,
         });
       } catch (error) {
@@ -567,7 +878,7 @@ export default function MapView({
 
         map.fitBounds(bounds, {
           padding: { top: 100, right: 120, bottom: 110, left: 120 },
-          maxZoom: 14,
+          maxZoom: routeType === "adventure" ? 13.8 : 14,
           duration: 900,
         });
 
@@ -624,85 +935,31 @@ export default function MapView({
             </span>
           </button>
 
-          <button
-            type="button"
-            className={`legend-toggle ${visibleLayers.bus ? "active" : ""}`}
-            onClick={() =>
-              setVisibleLayers((prev) => ({
-                ...prev,
-                bus: !prev.bus,
-              }))
-            }
-          >
-            <span className="legend-row">
-              <span className="legend-dot bus" />
-              <span>Transit cues</span>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            className={`legend-toggle ${visibleLayers.tree ? "active" : ""}`}
-            onClick={() =>
-              setVisibleLayers((prev) => ({
-                ...prev,
-                tree: !prev.tree,
-              }))
-            }
-          >
-            <span className="legend-row">
-              <span className="legend-dot tree" />
-              <span>Shade cues</span>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            className={`legend-toggle ${visibleLayers.bench ? "active" : ""}`}
-            onClick={() =>
-              setVisibleLayers((prev) => ({
-                ...prev,
-                bench: !prev.bench,
-              }))
-            }
-          >
-            <span className="legend-row">
-              <span className="legend-dot bench" />
-              <span>Rest points</span>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            className={`legend-toggle ${visibleLayers.signal ? "active" : ""}`}
-            onClick={() =>
-              setVisibleLayers((prev) => ({
-                ...prev,
-                signal: !prev.signal,
-              }))
-            }
-          >
-            <span className="legend-row">
-              <span className="legend-dot signal" />
-              <span>Crossing cues</span>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            className={`legend-toggle ${visibleLayers.lamp ? "active" : ""}`}
-            onClick={() =>
-              setVisibleLayers((prev) => ({
-                ...prev,
-                lamp: !prev.lamp,
-              }))
-            }
-          >
-            <span className="legend-row">
-              <span className="legend-dot lamp" />
-              <span>Street rhythm</span>
-            </span>
-          </button>
+          {cueCategories
+            .filter((category) => category.key !== "heritage")
+            .map((category) => (
+              <button
+                key={category.key}
+                type="button"
+                className={`legend-toggle ${
+                  visibleLayers[category.key] ? "active" : ""
+                }`}
+                onClick={() =>
+                  setVisibleLayers((prev) => ({
+                    ...prev,
+                    [category.key]: !prev[category.key],
+                  }))
+                }
+              >
+                <span className="legend-row">
+                  <span
+                    className="legend-dot"
+                    style={{ backgroundColor: category.color }}
+                  />
+                  <span>{category.label}</span>
+                </span>
+              </button>
+            ))}
         </div>
       </div>
 
@@ -713,7 +970,7 @@ export default function MapView({
 
           <div className="story-stats">
             <span>{stats?.distance || "—"}</span>
-            <span>{stats?.heritageStops || visibleHeritageSites.length} stops</span>
+            <span>{visibleHeritageSites.length} stops</span>
             <span>{cueCount} cues</span>
             <span>{stats?.durationText || `${timeMinutes} min`}</span>
           </div>

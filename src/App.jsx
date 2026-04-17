@@ -73,7 +73,7 @@ function pointToSegmentDistance(site, startSite, endSite) {
   const nearestX = x1 + t * dx;
   const nearestY = y1 + t * dy;
 
-  return Math.sqrt((x - nearestX) ** 2 + (y - nearestY) ** 2);
+  return Math.sqrt((x - x1) ** 2 + (y - nearestY) ** 2 + (nearestY - y) ** 2);
 }
 
 function pointProgressAlongSegment(site, startSite, endSite) {
@@ -104,7 +104,6 @@ function getVisibleHeritageSites(start, end, routeType, timeMinutes) {
     );
   }
 
-  // --- Narrative presets for key commuting corridors ---
   const presetRoutes = {
     "Camden Lock->Senate House": [
       "Camden Lock",
@@ -144,7 +143,6 @@ function getVisibleHeritageSites(start, end, routeType, timeMinutes) {
       .map((name) => findSiteByName(name))
       .filter(Boolean);
 
-    // 根据 timeMinutes 截断，但始终保留起点和终点
     if (orderedPresetSites.length <= 2) {
       return orderedPresetSites;
     }
@@ -173,7 +171,6 @@ function getVisibleHeritageSites(start, end, routeType, timeMinutes) {
     return [orderedPresetSites[0], ...sampledMiddle, orderedPresetSites.at(-1)];
   }
 
-  // --- Generic fallback for all other routes ---
   const maxStops = getAdventureStopCount(timeMinutes);
 
   const additionalSites = heritageSites
@@ -241,7 +238,10 @@ function buildStats(
 
   const durationMinutes =
     routeType === "adventure"
-      ? Math.max(estimatedDuration, Math.min(timeMinutes, estimatedDuration + 25))
+      ? Math.max(
+          estimatedDuration,
+          Math.min(timeMinutes, estimatedDuration + 25)
+        )
       : estimatedDuration;
 
   const heritageStops = visibleSites.length;

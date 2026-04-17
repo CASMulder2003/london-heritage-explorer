@@ -30,48 +30,6 @@ function SummaryRow({ label, value }) {
   );
 }
 
-function StoryCard({ index, site, selectedHeritage, onSelectHeritage }) {
-  if (!site) return null;
-
-  return (
-    <article
-      className={`story-card clickable ${
-        selectedHeritage?.name === site.name ? "active" : ""
-      }`}
-      onClick={() => onSelectHeritage?.(site)}
-    >
-      <div className="story-card-top">
-        <span className="story-index">{index + 1}</span>
-        <span className="story-tag">Narrative anchor</span>
-      </div>
-
-      <h4 className="story-title">{site.name}</h4>
-
-      <p className="story-description">
-        {site.description ||
-          "A spatial anchor that helps structure how this journey is experienced and remembered."}
-      </p>
-    </article>
-  );
-}
-
-function LayerToggle({ label, layerKey, checked, onChange }) {
-  return (
-    <label className="layer-toggle">
-      <span className="layer-toggle-left">
-        <span className={`legend-dot ${layerKey}`} />
-        <span>{label}</span>
-      </span>
-
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={() => onChange?.(layerKey)}
-      />
-    </label>
-  );
-}
-
 export default function Sidebar({
   activeTab,
   setActiveTab,
@@ -225,7 +183,7 @@ export default function Sidebar({
               </button>
             </div>
 
-            <div className="control-subtitle route-type-label">Route type</div>
+            <div className="control-subtitle route-type-label">Route style</div>
             <div className="toggle-group">
               <button
                 type="button"
@@ -234,7 +192,7 @@ export default function Sidebar({
                 }`}
                 onClick={() => setRouteType("direct")}
               >
-                Direct
+                Legible
               </button>
               <button
                 type="button"
@@ -243,14 +201,14 @@ export default function Sidebar({
                 }`}
                 onClick={() => setRouteType("adventure")}
               >
-                Adventure
+                Exploratory
               </button>
             </div>
 
             <div className="route-mode-note">
               {routeType === "direct"
-              ? "A more legible route that relies on fewer but clearer spatial cues."
-              : "A slower, exploratory route that reveals more cues and heritage moments along the way."}
+                ? "A clear and structured route guided by key landmarks and minimal cues."
+                : "A slower, cue-led journey that reveals spatial patterns and hidden heritage moments."}
             </div>
           </SidebarSection>
 
@@ -280,7 +238,6 @@ export default function Sidebar({
             </SidebarSection>
           )}
 
-
           <SidebarSection title="Route summary" className="summary-card">
             <SummaryRow label="Distance" value={routeSummary.distance} />
             <SummaryRow label="Estimated time" value={routeSummary.duration} />
@@ -294,13 +251,13 @@ export default function Sidebar({
             />
 
             <div className="route-note">
-             {routeType === "direct"
-             ? "Follows a clear spatial sequence using key cues and landmarks to support legible movement."
-             : "Encourages exploratory movement through a richer set of spatial cues and heritage anchors."}
-           </div>
+              {routeType === "direct"
+                ? "This route prioritises clarity and efficiency, using a small set of strong spatial anchors."
+                : "This journey encourages exploration, where movement is shaped by distributed cues and layered heritage narratives."}
+            </div>
           </SidebarSection>
 
-          <SidebarSection title="Story preview">
+          <SidebarSection title="Journey narrative">
             <div className="story-preview-header">
               <div className="story-preview-title">
                 {routeType === "adventure"
@@ -312,16 +269,27 @@ export default function Sidebar({
               </div>
             </div>
 
-            <div className="story-preview-list">
+            <div className="timeline">
               {storyPreviewSites.length > 0 ? (
                 storyPreviewSites.map((site, index) => (
-                  <StoryCard
+                  <div
                     key={site.id || site.name}
-                    index={index}
-                    site={site}
-                    selectedHeritage={selectedHeritage}
-                    onSelectHeritage={onSelectHeritage}
-                  />
+                    className={`timeline-item ${
+                      selectedHeritage?.name === site.name ? "active" : ""
+                    }`}
+                    onClick={() => onSelectHeritage?.(site)}
+                  >
+                    <div className="timeline-line" />
+                    <div className="timeline-dot">{index + 1}</div>
+
+                    <div className="timeline-content">
+                      <div className="timeline-title">{site.name}</div>
+                      <div className="timeline-desc">
+                        {site.description ||
+                          "A spatial anchor shaping how the journey unfolds."}
+                      </div>
+                    </div>
+                  </div>
                 ))
               ) : (
                 <div className="empty-state">
@@ -330,6 +298,34 @@ export default function Sidebar({
               )}
             </div>
           </SidebarSection>
+
+          {setLayerVisibility ? (
+            <SidebarSection title="Visible layers">
+              <div className="layer-toggle-list">
+                {[
+                  ["heritage", "Heritage anchors"],
+                  ["bus", "Transit cues"],
+                  ["tree", "Shade cues"],
+                  ["bench", "Rest points"],
+                  ["signal", "Crossing cues"],
+                  ["lamp", "Street rhythm"],
+                ].map(([key, label]) => (
+                  <label key={key} className="layer-toggle">
+                    <span className="layer-toggle-left">
+                      <span className={`legend-dot ${key}`} />
+                      <span>{label}</span>
+                    </span>
+
+                    <input
+                      type="checkbox"
+                      checked={Boolean(layerVisibility[key])}
+                      onChange={() => toggleLayer(key)}
+                    />
+                  </label>
+                ))}
+              </div>
+            </SidebarSection>
+          ) : null}
         </>
       )}
 

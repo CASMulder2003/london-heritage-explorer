@@ -4,7 +4,7 @@ export const heritageSites = [
     name: "St Pancras Old Church",
     period: "Early Christian / Medieval",
     description:
-      "One of the oldest Christian sites in England, associated with early parish history and burial grounds.",
+      "One of the oldest Christian sites in England, associated with early parish history, burial grounds, and quieter reflective urban space.",
     lat: 51.5306,
     lng: -0.1259,
     startEnd: true,
@@ -28,15 +28,27 @@ export const heritageSites = [
     name: "Camden Lock",
     period: "Industrial heritage",
     description:
-      "A historic canal-side area shaped by trade, transport and industrial activity in north London, now part of Camden's wider cultural landscape.",
+      "A historic canal-side area shaped by trade, transport, and industrial activity in north London, now central to Camden's wider cultural landscape.",
     lat: 51.5414,
     lng: -0.1455,
     startEnd: true,
-    adventure: false,
-    cueWeight: 1,
+    adventure: true,
+    cueWeight: 2,
   },
   {
     id: 4,
+    name: "King's Cross Station",
+    period: "Victorian transport infrastructure",
+    description:
+      "A major railway landmark representing London's industrial expansion, mobility networks, and large-scale urban regeneration.",
+    lat: 51.5308,
+    lng: -0.1238,
+    startEnd: true,
+    adventure: true,
+    cueWeight: 3,
+  },
+  {
+    id: 5,
     name: "The Foundling Museum",
     period: "18th century social history",
     description:
@@ -48,7 +60,7 @@ export const heritageSites = [
     cueWeight: 2,
   },
   {
-    id: 5,
+    id: 6,
     name: "Charles Dickens Museum",
     period: "19th century literary heritage",
     description:
@@ -56,18 +68,6 @@ export const heritageSites = [
     lat: 51.5236,
     lng: -0.1167,
     startEnd: false,
-    adventure: true,
-    cueWeight: 2,
-  },
-  {
-    id: 6,
-    name: "British Museum",
-    period: "18th century onwards",
-    description:
-      "A major civic and cultural landmark whose collections shaped London's role in global heritage narratives.",
-    lat: 51.5194,
-    lng: -0.1269,
-    startEnd: true,
     adventure: true,
     cueWeight: 2,
   },
@@ -85,14 +85,14 @@ export const heritageSites = [
   },
   {
     id: 8,
-    name: "Queen's Chapel",
-    period: "1623–1625",
+    name: "British Museum",
+    period: "18th century onwards",
     description:
-      "A royal chapel in central London, designed by Inigo Jones and built between 1623 and 1625 as an adjunct to St James's Palace.",
-    lat: 51.5045,
-    lng: -0.1337,
-    startEnd: false,
-    adventure: false,
-    cueWeight: 0,
+      "A major civic and cultural landmark whose collections shaped London's role in global heritage narratives.",
+    lat: 51.5194,
+    lng: -0.1269,
+    startEnd: true,
+    adventure: true,
+    cueWeight: 3,
   },
 ];
