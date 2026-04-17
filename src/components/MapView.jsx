@@ -230,15 +230,15 @@ function buildCueGroups(routeType, routeFeature) {
   };
 
   const limits = {
-    heritage: isAdventure ? 6 : 3,
-    transit: isAdventure ? 12 : 4,
-    shade: isAdventure ? 14 : 5,
-    rest: isAdventure ? 8 : 3,
-    crossing: isAdventure ? 10 : 4,
-    rhythm: isAdventure ? 8 : 3,
-    lighting: isAdventure ? 10 : 4,
-    threshold: isAdventure ? 8 : 3,
-    water: isAdventure ? 5 : 2,
+    heritage: isAdventure ? 4 : 2,
+    transit: isAdventure ? 6 : 3,
+    shade: isAdventure ? 6 : 3,
+    rest: isAdventure ? 4 : 2,
+    crossing: isAdventure ? 5 : 2,
+    rhythm: isAdventure ? 4 : 2,
+    lighting: isAdventure ? 5 : 2,
+    threshold: isAdventure ? 4 : 2,
+    water: isAdventure ? 3 : 1,
   };
 
   function prepareItems(items, threshold) {
@@ -275,11 +275,11 @@ function buildCueGroups(routeType, routeFeature) {
     });
 
     const picked = bins
-      .flatMap((bin) =>
-        pickDistributed(bin, Math.max(1, Math.ceil(limit / 4)))
-      )
-      .slice(0, limit);
-
+    .flatMap((bin) =>
+      pickDistributed(bin, Math.max(1, Math.floor(limit / 4)))
+    )
+    .slice(0, limit);
+    
     return {
       key: category.key,
       label: category.label,
@@ -344,7 +344,7 @@ function buildCueCorridorGeoJSON(cueGroups, routeFeature, routeType) {
   if (coordinates.length >= 2) {
     const generatedPoints = interpolatePointsAlongRoute(
       coordinates,
-      routeType === "adventure" ? 60 : 24
+      routeType === "adventure" ? 24 : 12
     );
 
     const generatedTypes =
@@ -352,31 +352,33 @@ function buildCueCorridorGeoJSON(cueGroups, routeFeature, routeType) {
         ? ["transit", "shade", "crossing", "rest", "lighting", "shade"]
         : ["transit", "crossing", "shade"];
 
-    generatedPoints.forEach((coord, index) => {
-      const type = generatedTypes[index % generatedTypes.length];
-      const category =
-        cueCategories.find((item) => item.key === type) || cueCategories[0];
-
-      const spread = routeType === "adventure" ? 0.0022 : 0.0012;
-      const lngOffset = (Math.random() - 0.5) * spread * 2;
-      const latOffset = (Math.random() - 0.5) * spread * 0.6;
-
-      features.push({
-        type: "Feature",
-        properties: {
-          id: `generated-${type}-${index}`,
-          type,
-          label: category.label,
-          name: category.label,
-          description: `A ${category.label.toLowerCase()} cue reinforces the spatial character of this part of the route.`,
-          generated: true,
-        },
-        geometry: {
-          type: "Point",
-          coordinates: [coord[0] + lngOffset, coord[1] + latOffset],
-        },
-      });
-    });
+        generatedPoints.forEach((coord, index) => {
+          if (routeType !== "adventure" && index % 2 !== 0) return;
+        
+          const type = generatedTypes[index % generatedTypes.length];
+          const category =
+            cueCategories.find((item) => item.key === type) || cueCategories[0];
+        
+          const spread = routeType === "adventure" ? 0.0014 : 0.0009;
+          const lngOffset = (Math.random() - 0.5) * spread * 2;
+          const latOffset = (Math.random() - 0.5) * spread * 0.6;
+        
+          features.push({
+            type: "Feature",
+            properties: {
+              id: `generated-${type}-${index}`,
+              type,
+              label: category.label,
+              name: category.label,
+              description: `A ${category.label.toLowerCase()} cue reinforces the spatial character of this part of the route.`,
+              generated: true,
+            },
+            geometry: {
+              type: "Point",
+              coordinates: [coord[0] + lngOffset, coord[1] + latOffset],
+            },
+          });
+        });
   }
 
   return {
@@ -489,9 +491,25 @@ const uniqueSites = (sites) =>
       return uniqueSites([...startAndEnd, ...rankedSites.slice(0, guidedCount)]);
     }
 
+    const candidates = rankedSites.filter(
+      (site) =>
+        site.name !== startSite?.name &&
+        site.name !== endSite?.name
+    );
+    
+    const middleSites = [];
+    if (candidates.length > 0) {
+      for (let i = 0; i < middleCount; i += 1) {
+        const index = Math.floor(((i + 1) * candidates.length) / (middleCount + 1));
+        if (candidates[index]) {
+          middleSites.push(candidates[index]);
+        }
+      }
+    }
+    
     return uniqueSites([
       startSite,
-      ...rankedSites.slice(0, middleCount),
+      ...middleSites,
       endSite,
     ].filter(Boolean));
 
@@ -560,13 +578,12 @@ const uniqueSites = (sites) =>
             "interpolate",
             ["linear"],
             ["zoom"],
-            11,
-            8,
-            15,
-            18,
+            12, 60,
+            14, 120,
+            16, 180
           ],
           "line-opacity": 0.12,
-          "line-blur": 1.2,
+          "line-blur": 2.5,
         },
       });
 
@@ -617,7 +634,7 @@ const uniqueSites = (sites) =>
             "rhythm", "#C58B00",
             "#999999",
           ],
-          "circle-opacity": 0.18,
+          "circle-opacity": 0.14,
           "circle-blur": 1.2,
           "circle-stroke-width": 0,
         },
@@ -632,7 +649,13 @@ const uniqueSites = (sites) =>
             "case",
             ["==", ["get", "generated"], true],
             3,
-            4,
+            [
+              "match",
+              ["get", "type"],
+              "threshold", 7,
+              "transit", 6,
+              5
+            ]
           ],
           "circle-color": [
             "match",
@@ -650,7 +673,7 @@ const uniqueSites = (sites) =>
           "circle-opacity": [
             "case",
             ["==", ["get", "generated"], true],
-            0.18,
+            0.14,
             0.35,
           ],
           "circle-stroke-color": "#ffffff",
@@ -741,7 +764,7 @@ const uniqueSites = (sites) =>
 
     if (map.getLayer("route-line")) {
       if (routeType === "adventure") {
-        map.setPaintProperty("route-line", "line-opacity", 0.16);
+        map.setPaintProperty("route-line", "line-opacity", 0.08);
         map.setPaintProperty("route-line", "line-width", 2);
         map.setPaintProperty("route-line", "line-dasharray", [1.2, 2.4]);
       } else {
@@ -755,12 +778,12 @@ const uniqueSites = (sites) =>
       map.setPaintProperty(
         "route-corridor",
         "line-opacity",
-        routeType === "adventure" ? 0.2 : 0.1
+        routeType === "adventure" ? 0.14 : 0.1
       );
       map.setPaintProperty(
         "route-corridor",
         "line-width",
-        routeType === "adventure" ? 60 : 20
+        routeType === "adventure" ? 32 : 20
       );
     }
   }, [routeType, mapReady]);
@@ -791,7 +814,7 @@ const uniqueSites = (sites) =>
             "cue-halo",
             "circle-opacity",
             highlightedCue
-              ? 0.32
+              ? 0.3
               : routeType === "adventure"
               ? 0.18
               : 0.12
@@ -801,19 +824,19 @@ const uniqueSites = (sites) =>
             "cue-halo",
             "circle-radius",
             routeType === "adventure"
-              ? [
-                  "match",
-                  ["get", "type"],
-                  "shade", 60,
-                  "water", 56,
-                  "lighting", 44,
-                  "transit", 40,
-                  "crossing", 36,
-                  "rest", 34,
-                  "threshold", 36,
-                  "rhythm", 34,
-                  34,
-                ]
+            ? [
+                "match",
+                ["get", "type"],
+                "shade", 36,
+                "water", 36,
+                "lighting", 28,
+                "transit", 26,
+                "crossing", 22,
+                "rest", 20,
+                "threshold", 22,
+                "rhythm", 20,
+                20,
+              ]
               : [
                   "match",
                   ["get", "type"],
@@ -830,27 +853,27 @@ const uniqueSites = (sites) =>
           );
         }  
 
-    if (map.getLayer("cue-core")) {
-      map.setFilter("cue-core", highlightedFilter);
-
-      map.setPaintProperty(
-        "cue-core",
-        "circle-opacity",
-        highlightedCue
-          ? [
-              "case",
-              ["==", ["get", "generated"], true],
-              0.4,
-              0.75,
-            ]
-          : [
-              "case",
-              ["==", ["get", "generated"], true],
-              0.22,
-              0.45,
-            ]
-      );
-    }
+        if (map.getLayer("cue-core")) {
+          map.setFilter("cue-core", highlightedFilter);
+        
+          map.setPaintProperty(
+            "cue-core",
+            "circle-opacity",
+            highlightedCue
+              ? [
+                  "case",
+                  ["==", ["get", "generated"], true],
+                  0.22,
+                  0.55,
+                ]
+              : [
+                  "case",
+                  ["==", ["get", "generated"], true],
+                  0.12,
+                  0.28,
+                ]
+          );
+        }
   }, [visibleLayers, highlightedCue, routeType, mapReady]);
 
   useEffect(() => {
