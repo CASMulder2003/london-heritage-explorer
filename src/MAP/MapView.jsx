@@ -528,34 +528,48 @@ function buildGeneratedCueFeatures(routeFeature, routeType, timeMinutes = 90) {
   const routeLength = getRouteLengthMeters(coordinates);
   if (!routeLength) return [];
 
-  const count =
-  routeType === "adventure"
-    ? timeMinutes <= 30
-      ? 6
-      : timeMinutes <= 60
-      ? 10
-      : timeMinutes <= 90
-      ? 14
-      : timeMinutes <= 120
-      ? 18
-      : timeMinutes <= 150
-      ? 22
-      : timeMinutes <= 180
-      ? 26
-      : timeMinutes <= 210
-      ? 30
-      : 34
-    : timeMinutes <= 30
-    ? 2
-    : timeMinutes <= 60
-    ? 4
-    : timeMinutes <= 90
-    ? 5
-    : timeMinutes <= 120
-    ? 6
-    : 7;
+  const isMobileView =
+    typeof window !== "undefined" && window.innerWidth <= 768;
 
-  const offsetMeters = routeType === "adventure" ? 10 : 6;
+  const baseCount =
+    routeType === "adventure"
+      ? timeMinutes <= 30
+        ? 6
+        : timeMinutes <= 60
+        ? 10
+        : timeMinutes <= 90
+        ? 14
+        : timeMinutes <= 120
+        ? 18
+        : timeMinutes <= 150
+        ? 22
+        : timeMinutes <= 180
+        ? 26
+        : timeMinutes <= 210
+        ? 30
+        : 34
+      : timeMinutes <= 30
+      ? 2
+      : timeMinutes <= 60
+      ? 4
+      : timeMinutes <= 90
+      ? 5
+      : timeMinutes <= 120
+      ? 6
+      : 7;
+
+  const adjustedCount = isMobileView
+    ? Math.max(4, Math.round(baseCount * 0.7))
+    : baseCount;
+
+  const offsetMeters = isMobileView
+    ? routeType === "adventure"
+      ? 7
+      : 4
+    : routeType === "adventure"
+    ? 10
+    : 6;
+
   const generatedTypes =
     routeType === "adventure"
       ? ["transit", "shade", "crossing", "rest", "lighting", "shade"]
@@ -563,8 +577,8 @@ function buildGeneratedCueFeatures(routeFeature, routeType, timeMinutes = 90) {
 
   const features = [];
 
-  for (let i = 0; i < count; i += 1) {
-    const progress = (i + 1) / (count + 1);
+  for (let i = 0; i < adjustedCount; i += 1) {
+    const progress = (i + 1) / (adjustedCount + 1);
     const targetDistance = routeLength * progress;
     const point = getPointAtDistanceAlongRoute(coordinates, targetDistance);
 
@@ -573,8 +587,10 @@ function buildGeneratedCueFeatures(routeFeature, routeType, timeMinutes = 90) {
     const [lng, lat] = point.coordinates;
     const [nx, ny] = point.normal;
     const side = i % 2 === 0 ? 1 : -1;
-    const displacedX = projectMeters(lng, lat)[0] + nx * offsetMeters * side;
-    const displacedY = projectMeters(lng, lat)[1] + ny * offsetMeters * side;
+
+    const projected = projectMeters(lng, lat);
+    const displacedX = projected[0] + nx * offsetMeters * side;
+    const displacedY = projected[1] + ny * offsetMeters * side;
     const displaced = unprojectMeters(displacedX, displacedY, lat);
 
     const snappedBack = nearestPointOnPolyline(displaced, coordinates);
@@ -689,6 +705,7 @@ export default function MapView({
   const [popupDismissed, setPopupDismissed] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
   const [highlightedCue, setHighlightedCue] = useState(null);
+  const isMobileView = typeof window !== "undefined" && window.innerWidth <= 768;
 
 
 
@@ -855,7 +872,7 @@ const generatedCueCount = useMemo(() => {
             14, 40,
             16, 60
           ],
-          "line-opacity": 0.12,
+          "line-opacity": 0.06,
           "line-blur": 0.6,
         },
       });
@@ -871,7 +888,7 @@ const generatedCueCount = useMemo(() => {
         paint: {
           "line-color": "#7c3aed",
           "line-width": 2.8,
-          "line-opacity": 0.28,
+          "line-opacity": 0.18,
           "line-dasharray": [1.2, 1.8],
         },
       });
@@ -881,19 +898,33 @@ const generatedCueCount = useMemo(() => {
         type: "circle",
         source: "cue-points",
         paint: {
-          "circle-radius": [
-            "match",
-            ["get", "type"],
-            "shade", 38,
-            "water", 34,
-            "lighting", 28,
-            "transit", 26,
-            "crossing", 24,
-            "rest", 22,
-            "threshold", 24,
-            "rhythm", 22,
-            22,
-          ],
+          "circle-radius": isMobileView
+            ? [
+                "match",
+                ["get", "type"],
+                "shade", 12,
+                "water", 11,
+                "lighting", 10,
+                "transit", 10,
+                "crossing", 9,
+                "rest", 8,
+                "threshold", 9,
+                "rhythm", 8,
+                8,
+              ]
+            : [
+                "match",
+                ["get", "type"],
+                "shade", 16,
+                "water", 15,
+                "lighting", 13,
+                "transit", 13,
+                "crossing", 12,
+                "rest", 10,
+                "threshold", 12,
+                "rhythm", 10,
+                10,
+              ],
           "circle-color": [
             "match",
             ["get", "type"],
@@ -907,8 +938,8 @@ const generatedCueCount = useMemo(() => {
             "rhythm", "#C58B00",
             "#999999",
           ],
-          "circle-opacity": 0.18,
-          "circle-blur": 0.9,
+          "circle-opacity": isMobileView ? 0.1 : 0.12,
+          "circle-blur": isMobileView ? 0.12 : 0.16,
           "circle-stroke-width": 0,
         },
       });
@@ -918,18 +949,33 @@ const generatedCueCount = useMemo(() => {
         type: "circle",
         source: "cue-points",
         paint: {
-          "circle-radius": [
-            "case",
-            ["==", ["get", "generated"], true],
-            3,
-            [
-              "match",
-              ["get", "type"],
-              "threshold", 7,
-              "transit", 6,
-              5
-            ]
-          ],
+          "circle-radius": isMobileView
+            ? [
+                "case",
+                ["==", ["get", "generated"], true],
+                3,
+                [
+                  "match",
+                  ["get", "type"],
+                  "threshold", 6,
+                  "transit", 5,
+                  "lighting", 5,
+                  4
+                ]
+              ]
+            : [
+                "case",
+                ["==", ["get", "generated"], true],
+                4,
+                [
+                  "match",
+                  ["get", "type"],
+                  "threshold", 7,
+                  "transit", 6,
+                  "lighting", 6,
+                  5
+                ]
+              ],
           "circle-color": [
             "match",
             ["get", "type"],
@@ -946,12 +992,12 @@ const generatedCueCount = useMemo(() => {
           "circle-opacity": [
             "case",
             ["==", ["get", "generated"], true],
-            0.22,
-            0.58,
+            0.82,
+            0.92,
           ],
           "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 1.2,
-          "circle-stroke-opacity": 0.9,
+          "circle-stroke-width": isMobileView ? 1.4 : 1.8,
+          "circle-stroke-opacity": 1,
         },
       });
 
@@ -1039,35 +1085,32 @@ const generatedCueCount = useMemo(() => {
     if (!map || !mapReady) return;
   
     if (map.getLayer("route-line")) {
-      if (routeType === "adventure") {
-        map.setPaintProperty("route-line", "line-color", "#7c3aed");
-        map.setPaintProperty("route-line", "line-opacity", 0.28);
-        map.setPaintProperty("route-line", "line-width", 2.8);
-        map.setPaintProperty("route-line", "line-dasharray", [1.2, 1.8]);
-      } else {
+      map.setLayoutProperty(
+        "route-line",
+        "visibility",
+        routeType === "adventure" ? "none" : "visible"
+      );
+    
+      if (routeType !== "adventure") {
         map.setPaintProperty("route-line", "line-color", "#2563eb");
-        map.setPaintProperty("route-line", "line-opacity", 0.22);
-        map.setPaintProperty("route-line", "line-width", 2.4);
+        map.setPaintProperty("route-line", "line-opacity", 0.18);
+        map.setPaintProperty("route-line", "line-width", 2.2);
         map.setPaintProperty("route-line", "line-dasharray", [1, 0]);
       }
     }
     
     if (map.getLayer("route-corridor")) {
-      map.setPaintProperty(
+      map.setLayoutProperty(
         "route-corridor",
-        "line-color",
-        routeType === "adventure" ? "#7c3aed" : "#2563eb"
+        "visibility",
+        routeType === "adventure" ? "none" : "visible"
       );
-      map.setPaintProperty(
-        "route-corridor",
-        "line-opacity",
-        routeType === "adventure" ? 0.08 : 0.05
-      );
-      map.setPaintProperty(
-        "route-corridor",
-        "line-width",
-        routeType === "adventure" ? 16 : 10
-      );
+    
+      if (routeType !== "adventure") {
+        map.setPaintProperty("route-corridor", "line-color", "#2563eb");
+        map.setPaintProperty("route-corridor", "line-opacity", 0.04);
+        map.setPaintProperty("route-corridor", "line-width", 8);
+      }
     }
   }, [routeType, mapReady]);
 
@@ -1097,9 +1140,8 @@ const generatedCueCount = useMemo(() => {
         "circle-opacity",
         emphasizedKeys.length
           ? [
-              "match",
-              ["get", "type"],
-              ["literal", emphasizedKeys],
+              "case",
+              ["in", ["get", "type"], ["literal", emphasizedKeys]],
               0.42,
               0.05,
             ]
@@ -1109,51 +1151,51 @@ const generatedCueCount = useMemo(() => {
       );
   
       map.setPaintProperty(
-        "cue-halo",
+        "cue-core",
         "circle-radius",
         emphasizedKeys.length
           ? [
               "case",
-              ["match", ["get", "type"], ["literal", emphasizedKeys], true, false],
+              ["in", ["get", "type"], ["literal", emphasizedKeys]],
               [
-                "match",
-                ["get", "type"],
-                "shade", 38,
-                "water", 34,
-                "lighting", 28,
-                "transit", 26,
-                "crossing", 24,
-                "rest", 22,
-                "threshold", 24,
-                "rhythm", 22,
-                22,
+                "case",
+                ["==", ["get", "generated"], true],
+                isMobileView ? 4 : 5,
+                [
+                  "match",
+                  ["get", "type"],
+                  "threshold", isMobileView ? 7 : 8,
+                  "transit", isMobileView ? 6 : 7,
+                  "lighting", isMobileView ? 6 : 7,
+                  isMobileView ? 5 : 6,
+                ],
               ],
               [
-                "match",
-                ["get", "type"],
-                "shade", 20,
-                "water", 18,
-                "lighting", 15,
-                "transit", 14,
-                "crossing", 12,
-                "rest", 10,
-                "threshold", 12,
-                "rhythm", 10,
-                10,
+                "case",
+                ["==", ["get", "generated"], true],
+                isMobileView ? 2 : 3,
+                [
+                  "match",
+                  ["get", "type"],
+                  "threshold", isMobileView ? 4 : 5,
+                  "transit", isMobileView ? 3 : 4,
+                  "lighting", isMobileView ? 3 : 4,
+                  isMobileView ? 3 : 4,
+                ],
               ],
             ]
           : [
-              "match",
-              ["get", "type"],
-              "shade", 30,
-              "water", 26,
-              "lighting", 22,
-              "transit", 20,
-              "crossing", 18,
-              "rest", 16,
-              "threshold", 18,
-              "rhythm", 16,
-              16,
+              "case",
+              ["==", ["get", "generated"], true],
+              isMobileView ? 3 : 4,
+              [
+                "match",
+                ["get", "type"],
+                "threshold", isMobileView ? 6 : 7,
+                "transit", isMobileView ? 5 : 6,
+                "lighting", isMobileView ? 5 : 6,
+                isMobileView ? 4 : 5,
+              ],
             ]
       );
     }
@@ -1162,21 +1204,20 @@ const generatedCueCount = useMemo(() => {
       map.setFilter("cue-core", baseFilter);
   
       map.setPaintProperty(
-        "cue-core",
+        "cue-halo",
         "circle-opacity",
         emphasizedKeys.length
           ? [
               "case",
-              ["match", ["get", "type"], ["literal", emphasizedKeys], true, false],
-              ["case", ["==", ["get", "generated"], true], 0.5, 1],
-              ["case", ["==", ["get", "generated"], true], 0.05, 0.16],
+              ["in", ["get", "type"], ["literal", emphasizedKeys]],
+              isMobileView ? 0.2 : 0.26,
+              isMobileView ? 0.03 : 0.04,
             ]
-          : [
-              "case",
-              ["==", ["get", "generated"], true],
-              0.2,
-              0.42,
-            ]
+          : isMobileView
+          ? 0.08
+          : routeType === "adventure"
+          ? 0.12
+          : 0.1
       );
   
       map.setPaintProperty(
@@ -1185,43 +1226,45 @@ const generatedCueCount = useMemo(() => {
         emphasizedKeys.length
           ? [
               "case",
-              ["match", ["get", "type"], ["literal", emphasizedKeys], true, false],
+              ["in", ["get", "type"], ["literal", emphasizedKeys]],
               [
                 "case",
                 ["==", ["get", "generated"], true],
-                5,
+                6,
                 [
                   "match",
                   ["get", "type"],
-                  "threshold", 10,
-                  "transit", 9,
-                  "lighting", 9,
-                  8,
+                  "threshold", 9,
+                  "transit", 8,
+                  "lighting", 8,
+                  7,
                 ],
               ],
               [
                 "case",
                 ["==", ["get", "generated"], true],
-                2,
+                3,
                 [
                   "match",
                   ["get", "type"],
-                  "threshold", 4,
-                  "transit", 3,
-                  3,
+                  "threshold", 5,
+                  "transit", 4,
+                  "lighting", 4,
+                  4,
                 ],
               ],
             ]
           : [
               "case",
               ["==", ["get", "generated"], true],
-              3,
+              6,
               [
                 "match",
                 ["get", "type"],
-                "threshold", 7,
-                "transit", 6,
-                5,
+                "threshold", 9,
+                "transit", 8,
+                "lighting", 8,
+                7,
               ],
             ]
       );
@@ -1636,13 +1679,15 @@ const generatedCueCount = useMemo(() => {
         </div>
       ) : null}
 
-      <SegmentLayer
-  map={mapRef.current}
-  mapReady={mapReady}
-  currentRoute={currentRoute}
-  narrativeSteps={narrativeSteps}
-  selectedNarrativeStep={selectedNarrativeStep}
-/>
+{routeType !== "adventure" && (
+  <SegmentLayer
+    map={mapRef.current}
+    mapReady={mapReady}
+    currentRoute={currentRoute}
+    narrativeSteps={narrativeSteps}
+    selectedNarrativeStep={selectedNarrativeStep}
+  />
+)}
 
       <div ref={mapContainerRef} className="mapbox-map" />
     </div>
