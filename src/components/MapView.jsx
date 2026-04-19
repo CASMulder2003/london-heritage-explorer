@@ -1465,7 +1465,7 @@ const generatedCueCount = useMemo(() => {
 </p>
 
   <div className="story-stats">
-    <span>{timeMinutes} min</span>
+  <span>{timeMinutes < 60 ? `${timeMinutes} min` : `${Math.floor(timeMinutes / 60)}h${timeMinutes % 60 ? ` ${timeMinutes % 60}m` : ""}`}</span>
     <span>{visibleHeritageSites.length} stops</span>
     <span>{displayCueCount} cues</span>
     <span>{travelMode === "cycle" ? "Cycle mode" : "Walk mode"}</span>

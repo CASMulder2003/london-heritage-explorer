@@ -428,10 +428,18 @@ select {
   color: #7a7268;
 }
 
+.landmark-desc {
+  font-size: 12px;
+  color: #6f675f;
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
 .empty-state {
   font-size: 13px;
   color: #736c63;
 }
+
 
 /* ---------- Map ---------- */
 

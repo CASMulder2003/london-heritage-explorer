@@ -21,15 +21,6 @@ function SidebarSection({ title, children, className = "" }) {
   );
 }
 
-function SummaryRow({ label, value }) {
-  return (
-    <div className="summary-row">
-      <span className="summary-label">{label}</span>
-      <span className="summary-value">{value}</span>
-    </div>
-  );
-}
-
 export default function Sidebar({
   activeTab,
   setActiveTab,
@@ -50,47 +41,13 @@ export default function Sidebar({
   visibleHeritageSites = [],
   selectedHeritage,
   onSelectHeritage,
-  layerVisibility = {
-    heritage: true,
-    bus: true,
-    tree: true,
-    bench: true,
-    signal: true,
-    lamp: false,
-  },
-  setLayerVisibility,
 }) {
-  const routeSummary = {
-    distance: stats?.distance ?? "4.8 km",
-    duration:
-      stats?.durationText ??
-      formatTime(stats?.durationMinutes ?? timeMinutes ?? 90),
-    heritageStops: stats?.heritageStops ?? visibleHeritageSites.length ?? 0,
-    urbanFeatures: stats?.urbanFeatures ?? 12,
-  };
-
-  const storyPreviewSites =
-    routeType === "direct"
-      ? visibleHeritageSites.slice(0, 3)
-      : visibleHeritageSites.slice(0, 4);
-
-  const toggleLayer = (layerKey) => {
-    if (!setLayerVisibility) return;
-
-    setLayerVisibility((prev) => ({
-      ...prev,
-      [layerKey]: !prev[layerKey],
-    }));
-  };
-
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-  <div className="app-title">London Heritage Explorer</div>
-  <div className="app-subtitle">
-  Explore the city through everyday cues
-  </div>
-</div>
+        <div className="app-title">London Heritage Explorer</div>
+        <div className="app-subtitle">Explore the city through everyday cues</div>
+      </div>
 
       <div className="tab-bar">
         {tabs.map((tab) => (
@@ -164,18 +121,14 @@ export default function Sidebar({
             <div className="toggle-group">
               <button
                 type="button"
-                className={`toggle-pill ${
-                  travelMode === "walk" ? "active" : ""
-                }`}
+                className={`toggle-pill ${travelMode === "walk" ? "active" : ""}`}
                 onClick={() => setTravelMode("walk")}
               >
                 Walk
               </button>
               <button
                 type="button"
-                className={`toggle-pill ${
-                  travelMode === "cycle" ? "active" : ""
-                }`}
+                className={`toggle-pill ${travelMode === "cycle" ? "active" : ""}`}
                 onClick={() => setTravelMode("cycle")}
               >
                 Cycle
@@ -186,18 +139,14 @@ export default function Sidebar({
             <div className="toggle-group">
               <button
                 type="button"
-                className={`toggle-pill ${
-                  routeType === "direct" ? "active" : ""
-                }`}
+                className={`toggle-pill ${routeType === "direct" ? "active" : ""}`}
                 onClick={() => setRouteType("direct")}
               >
                 Guided
               </button>
               <button
                 type="button"
-                className={`toggle-pill ${
-                  routeType === "adventure" ? "active" : ""
-                }`}
+                className={`toggle-pill ${routeType === "adventure" ? "active" : ""}`}
                 onClick={() => setRouteType("adventure")}
               >
                 Exploratory
@@ -206,7 +155,10 @@ export default function Sidebar({
           </SidebarSection>
 
           {routeType === "adventure" && (
-            <SidebarSection title="How much time do you have?" className="time-card">
+            <SidebarSection
+              title="How much time do you have?"
+              className="time-card"
+            >
               <div className="time-stepper">
                 <button
                   type="button"
@@ -230,46 +182,13 @@ export default function Sidebar({
               </div>
             </SidebarSection>
           )}
-
-
-          {setLayerVisibility ? (
-            <SidebarSection title="Visible layers">
-              <div className="layer-toggle-list">
-                {[
-                  [
-                    ["heritage", "Heritage sites"],
-                    ["bus", "Bus stops"],
-                    ["tree", "Trees"],
-                    ["bench", "Benches"],
-                    ["signal", "Signals"],
-                    ["lamp", "Street lamps"],
-                  ],
-                ].map(([key, label]) => (
-                  <label key={key} className="layer-toggle">
-                    <span className="layer-toggle-left">
-                      <span className={`legend-dot ${key}`} />
-                      <span>{label}</span>
-                    </span>
-
-                    <input
-                      type="checkbox"
-                      checked={Boolean(layerVisibility[key])}
-                      onChange={() => toggleLayer(key)}
-                    />
-                  </label>
-                ))}
-              </div>
-            </SidebarSection>
-          ) : null}
         </>
       )}
 
       {activeTab === "Landmarks" && (
         <div className="tab-panel-placeholder">
           <h3>Landmarks</h3>
-          <p>
-          Tap a place to uncover its story.
-          </p>
+          <p>Tap a place to uncover its story.</p>
 
           <div className="landmark-list">
             {visibleHeritageSites.length > 0 ? (
@@ -280,11 +199,18 @@ export default function Sidebar({
                     selectedHeritage?.name === site.name ? "active" : ""
                   }`}
                   onClick={() => onSelectHeritage?.(site)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      onSelectHeritage?.(site);
+                    }
+                  }}
                 >
                   <span className="landmark-number">{index + 1}</span>
                   <div className="landmark-copy">
                     <div className="landmark-name">{site.name}</div>
-                    <div className="landmark-meta">Story point</div>
+                    <div className="landmark-meta">{site.period}</div>
                   </div>
                 </div>
               ))
@@ -294,7 +220,6 @@ export default function Sidebar({
           </div>
         </div>
       )}
-
     </aside>
   );
 }
