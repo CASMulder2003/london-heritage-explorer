@@ -53,7 +53,7 @@ function buildFallbackRoute(
       (site) => site.name !== startSite.name && site.name !== endSite.name
     );
 
-    middleSites.slice(0, 3).forEach((site) => {
+    middleSites.forEach((site) => {
       coordinates.push([site.lng, site.lat]);
     });
   }
@@ -70,19 +70,33 @@ function buildFallbackRoute(
   };
 }
 
-function getNarrativeCopy(routeType, travelMode) {
+function getNarrativeCopy(routeType, travelMode, timeMinutes, stopCount, cueCount) {
   const modeLabel = travelMode === "cycle" ? "cycle" : "walk";
 
   if (routeType === "adventure") {
+    if (timeMinutes <= 60) {
+      return {
+        title: "Explore through urban cues",
+        description: `A short exploratory ${modeLabel} that begins to loosen the commute. Heritage stops and everyday cues work together to shift attention away from direct instruction and toward the character of the street.`,
+      };
+    }
+
+    if (timeMinutes <= 120) {
+      return {
+        title: "A wider corridor of discovery",
+        description: `This exploratory ${modeLabel} uses ${stopCount} heritage stops and ${cueCount} cues to stretch the journey into a richer urban corridor. The route is still readable, but it opens more room for drift, noticing, and spatial interpretation.`,
+      };
+    }
+
     return {
-      title: "Explore by landmark",
-      description: `Use the map, numbered heritage stops, and environmental cues to guide your ${modeLabel}. The route is suggested as a loose urban corridor rather than a fixed instruction line.`,
+      title: "A slower spatial story",
+      description: `This longer exploratory ${modeLabel} prioritises atmosphere over efficiency. The route moves through a broader sequence of landmarks and cues, encouraging the city itself to guide the journey rather than a single prescribed line.`,
     };
   }
 
   return {
-    title: "Follow nearby heritage",
-    description: `This ${modeLabel} view keeps the destination legible while still encouraging you to navigate through landmarks rather than strict turn-by-turn directions.`,
+    title: "A guided route with local anchors",
+    description: `This guided ${modeLabel} keeps the destination legible while still threading nearby heritage and urban cues into the journey. It supports movement without turning the city into background.`,
   };
 }
 
@@ -90,6 +104,12 @@ function projectMeters(lng, lat) {
   const x = lng * 111320 * Math.cos((lat * Math.PI) / 180);
   const y = lat * 110540;
   return [x, y];
+}
+
+function unprojectMeters(x, y, referenceLat) {
+  const lng = x / (111320 * Math.cos((referenceLat * Math.PI) / 180));
+  const lat = y / 110540;
+  return [lng, lat];
 }
 
 function pointToSegmentDistanceMeters(point, start, end) {
@@ -115,64 +135,82 @@ function pointToSegmentDistanceMeters(point, start, end) {
   return Math.hypot(px - nearestX, py - nearestY);
 }
 
-function pointProgressAlongPolyline(point, coordinates) {
-  if (!coordinates || coordinates.length < 2) return 0;
-
+function nearestPointOnSegment(point, start, end) {
   const [px, py] = projectMeters(point[0], point[1]);
+  const [x1, y1] = projectMeters(start[0], start[1]);
+  const [x2, y2] = projectMeters(end[0], end[1]);
+
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+
+  if (dx === 0 && dy === 0) {
+    return {
+      coordinates: start,
+      t: 0,
+      distance: Math.hypot(px - x1, py - y1),
+    };
+  }
+
+  const t = Math.max(
+    0,
+    Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy))
+  );
+
+  const nearestX = x1 + t * dx;
+  const nearestY = y1 + t * dy;
+
+  return {
+    coordinates: unprojectMeters(nearestX, nearestY, point[1]),
+    t,
+    distance: Math.hypot(px - nearestX, py - nearestY),
+  };
+}
+
+function nearestPointOnPolyline(point, coordinates) {
+  if (!coordinates || coordinates.length < 2) {
+    return { coordinates: point, progress: 0, distance: Infinity };
+  }
+
+  let bestDistance = Infinity;
+  let bestPoint = point;
+  let bestProgress = 0;
 
   let totalLength = 0;
   const segmentLengths = [];
 
   for (let i = 0; i < coordinates.length - 1; i += 1) {
     const [x1, y1] = projectMeters(coordinates[i][0], coordinates[i][1]);
-    const [x2, y2] = projectMeters(
-      coordinates[i + 1][0],
-      coordinates[i + 1][1]
-    );
+    const [x2, y2] = projectMeters(coordinates[i + 1][0], coordinates[i + 1][1]);
     const segLen = Math.hypot(x2 - x1, y2 - y1);
     segmentLengths.push(segLen);
     totalLength += segLen;
   }
 
-  if (totalLength === 0) return 0;
-
-  let bestDistance = Infinity;
-  let bestProgress = 0;
   let traversed = 0;
 
   for (let i = 0; i < coordinates.length - 1; i += 1) {
-    const [x1, y1] = projectMeters(coordinates[i][0], coordinates[i][1]);
-    const [x2, y2] = projectMeters(
-      coordinates[i + 1][0],
-      coordinates[i + 1][1]
-    );
-    const dx = x2 - x1;
-    const dy = y2 - y1;
+    const result = nearestPointOnSegment(point, coordinates[i], coordinates[i + 1]);
     const segLen = segmentLengths[i];
 
-    if (segLen === 0) {
-      traversed += segLen;
-      continue;
-    }
-
-    const t = Math.max(
-      0,
-      Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy))
-    );
-
-    const nearestX = x1 + t * dx;
-    const nearestY = y1 + t * dy;
-    const distance = Math.hypot(px - nearestX, py - nearestY);
-
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      bestProgress = (traversed + segLen * t) / totalLength;
+    if (result.distance < bestDistance) {
+      bestDistance = result.distance;
+      bestPoint = result.coordinates;
+      bestProgress =
+        totalLength === 0 ? 0 : (traversed + segLen * result.t) / totalLength;
     }
 
     traversed += segLen;
   }
 
-  return bestProgress;
+  return {
+    coordinates: bestPoint,
+    progress: bestProgress,
+    distance: bestDistance,
+  };
+}
+
+function pointProgressAlongPolyline(point, coordinates) {
+  return nearestPointOnPolyline(point, coordinates).progress;
 }
 
 function isPointNearRoute(point, coordinates, thresholdMeters = 120) {
@@ -213,48 +251,180 @@ function pickDistributed(items, count) {
   return dedupeById(picked);
 }
 
-function buildCueGroups(routeType, routeFeature) {
+function buildCueGroups(routeType, routeFeature, timeMinutes = 90) {
   const routeCoordinates = routeFeature?.geometry?.coordinates || [];
   const isAdventure = routeType === "adventure";
+  const minutes = timeMinutes;
 
   const thresholds = {
-    heritage: isAdventure ? 260 : 160,
-    transit: isAdventure ? 180 : 100,
-    shade: isAdventure ? 220 : 120,
-    rest: isAdventure ? 190 : 100,
-    crossing: isAdventure ? 160 : 90,
-    rhythm: isAdventure ? 170 : 95,
-    lighting: isAdventure ? 190 : 105,
-    threshold: isAdventure ? 180 : 100,
-    water: isAdventure ? 260 : 150,
+    heritage: isAdventure ? 120 : 80,
+    transit: isAdventure ? 90 : 70,
+    shade: isAdventure ? 100 : 75,
+    rest: isAdventure ? 85 : 65,
+    crossing: isAdventure ? 75 : 55,
+    rhythm: isAdventure ? 80 : 60,
+    lighting: isAdventure ? 85 : 60,
+    threshold: isAdventure ? 80 : 60,
+    water: isAdventure ? 110 : 80,
   };
 
-  const limits = {
-    heritage: isAdventure ? 4 : 2,
-    transit: isAdventure ? 6 : 3,
-    shade: isAdventure ? 6 : 3,
-    rest: isAdventure ? 4 : 2,
-    crossing: isAdventure ? 5 : 2,
-    rhythm: isAdventure ? 4 : 2,
-    lighting: isAdventure ? 5 : 2,
-    threshold: isAdventure ? 4 : 2,
-    water: isAdventure ? 3 : 1,
-  };
+  let limits;
+
+  if (isAdventure) {
+    if (minutes <= 30) {
+      limits = {
+        heritage: 2,
+        transit: 3,
+        shade: 3,
+        rest: 2,
+        crossing: 2,
+        rhythm: 1,
+        lighting: 2,
+        threshold: 1,
+        water: 1,
+      };
+    } else if (minutes <= 60) {
+      limits = {
+        heritage: 4,
+        transit: 6,
+        shade: 6,
+        rest: 4,
+        crossing: 4,
+        rhythm: 3,
+        lighting: 4,
+        threshold: 3,
+        water: 2,
+      };
+    } else if (minutes <= 90) {
+      limits = {
+        heritage: 5,
+        transit: 8,
+        shade: 8,
+        rest: 5,
+        crossing: 5,
+        rhythm: 4,
+        lighting: 5,
+        threshold: 4,
+        water: 2,
+      };
+    } else if (minutes <= 120) {
+      limits = {
+        heritage: 7,
+        transit: 10,
+        shade: 10,
+        rest: 6,
+        crossing: 6,
+        rhythm: 5,
+        lighting: 6,
+        threshold: 5,
+        water: 3,
+      };
+    } else if (minutes <= 150) {
+      limits = {
+        heritage: 8,
+        transit: 12,
+        shade: 12,
+        rest: 7,
+        crossing: 7,
+        rhythm: 6,
+        lighting: 7,
+        threshold: 6,
+        water: 3,
+      };
+    } else if (minutes <= 180) {
+      limits = {
+        heritage: 8,
+        transit: 11,
+        shade: 12,
+        rest: 7,
+        crossing: 6,
+        rhythm: 5,
+        lighting: 7,
+        threshold: 5,
+        water: 3,
+      };
+    } else {
+      limits = {
+        heritage: 9,
+        transit: 13,
+        shade: 14,
+        rest: 8,
+        crossing: 7,
+        rhythm: 6,
+        lighting: 8,
+        threshold: 6,
+        water: 4,
+      };
+    }
+  } else {
+    if (minutes <= 30) {
+      limits = {
+        heritage: 1,
+        transit: 2,
+        shade: 2,
+        rest: 1,
+        crossing: 1,
+        rhythm: 0,
+        lighting: 1,
+        threshold: 0,
+        water: 0,
+      };
+    } else if (minutes <= 60) {
+      limits = {
+        heritage: 2,
+        transit: 3,
+        shade: 3,
+        rest: 2,
+        crossing: 2,
+        rhythm: 1,
+        lighting: 2,
+        threshold: 1,
+        water: 1,
+      };
+    } else if (minutes <= 90) {
+      limits = {
+        heritage: 2,
+        transit: 4,
+        shade: 4,
+        rest: 2,
+        crossing: 2,
+        rhythm: 1,
+        lighting: 2,
+        threshold: 1,
+        water: 1,
+      };
+    } else {
+      limits = {
+        heritage: 3,
+        transit: 5,
+        shade: 5,
+        rest: 3,
+        crossing: 3,
+        rhythm: 2,
+        lighting: 3,
+        threshold: 2,
+        water: 1,
+      };
+    }
+  }
+ 
 
   function prepareItems(items, threshold) {
     if (!routeCoordinates || routeCoordinates.length < 2) return [];
 
     return items
-      .filter((item) =>
-        isPointNearRoute([item.lng, item.lat], routeCoordinates, threshold)
-      )
-      .map((item) => ({
-        ...item,
-        progress: pointProgressAlongPolyline(
-          [item.lng, item.lat],
-          routeCoordinates
-        ),
-      }));
+      .map((item) => {
+        const nearest = nearestPointOnPolyline([item.lng, item.lat], routeCoordinates);
+
+        return {
+          ...item,
+          snappedLng: nearest.coordinates[0],
+          snappedLat: nearest.coordinates[1],
+          progress: nearest.progress,
+          distanceToRoute: nearest.distance,
+        };
+      })
+      .filter((item) => item.distanceToRoute <= threshold);
   }
 
   return cueCategories.map((category) => {
@@ -264,22 +434,28 @@ function buildCueGroups(routeType, routeFeature) {
     );
 
     const sorted = [...prepared].sort((a, b) => a.progress - b.progress);
-    const limit = limits[category.key] || sorted.length;
+    const limit = limits[category.key] ?? sorted.length;
 
-    const bins = [[], [], [], []];
+    const segmentCount = isAdventure ? 6 : 4;
+    const bins = Array.from({ length: segmentCount }, () => []);
+    
     sorted.forEach((item) => {
-      if (item.progress < 0.25) bins[0].push(item);
-      else if (item.progress < 0.5) bins[1].push(item);
-      else if (item.progress < 0.75) bins[2].push(item);
-      else bins[3].push(item);
+      const index = Math.min(
+        segmentCount - 1,
+        Math.floor(item.progress * segmentCount)
+      );
+      bins[index].push(item);
     });
 
-    const picked = bins
-    .flatMap((bin) =>
-      pickDistributed(bin, Math.max(1, Math.floor(limit / 4)))
-    )
-    .slice(0, limit);
-    
+const picksPerBin = Math.max(1, Math.ceil(limit / bins.length));
+
+const picked =
+  limit === 0
+    ? []
+    : bins
+        .flatMap((bin) => pickDistributed(bin, picksPerBin))
+        .slice(0, limit);
+
     return {
       key: category.key,
       label: category.label,
@@ -290,31 +466,147 @@ function buildCueGroups(routeType, routeFeature) {
   });
 }
 
-function interpolatePointsAlongRoute(coordinates, steps = 18) {
-  if (!coordinates || coordinates.length < 2) return [];
+function getRouteLengthMeters(coordinates) {
+  if (!coordinates || coordinates.length < 2) return 0;
 
-  const result = [];
-  const totalSegments = coordinates.length - 1;
-
-  for (let i = 0; i < steps; i += 1) {
-    const t = i / (steps - 1);
-    const segmentFloat = t * totalSegments;
-    const segmentIndex = Math.min(totalSegments - 1, Math.floor(segmentFloat));
-    const localT = segmentFloat - segmentIndex;
-
-    const start = coordinates[segmentIndex];
-    const end = coordinates[segmentIndex + 1];
-
-    const lng = start[0] + (end[0] - start[0]) * localT;
-    const lat = start[1] + (end[1] - start[1]) * localT;
-
-    result.push([lng, lat]);
+  let total = 0;
+  for (let i = 0; i < coordinates.length - 1; i += 1) {
+    const [x1, y1] = projectMeters(coordinates[i][0], coordinates[i][1]);
+    const [x2, y2] = projectMeters(coordinates[i + 1][0], coordinates[i + 1][1]);
+    total += Math.hypot(x2 - x1, y2 - y1);
   }
-
-  return result;
+  return total;
 }
 
-function buildCueCorridorGeoJSON(cueGroups, routeFeature, routeType) {
+function getPointAtDistanceAlongRoute(coordinates, targetDistance) {
+  if (!coordinates || coordinates.length < 2) return null;
+
+  let traversed = 0;
+
+  for (let i = 0; i < coordinates.length - 1; i += 1) {
+    const start = coordinates[i];
+    const end = coordinates[i + 1];
+
+    const [x1, y1] = projectMeters(start[0], start[1]);
+    const [x2, y2] = projectMeters(end[0], end[1]);
+    const segLen = Math.hypot(x2 - x1, y2 - y1);
+
+    if (segLen === 0) continue;
+
+    if (traversed + segLen >= targetDistance) {
+      const t = (targetDistance - traversed) / segLen;
+      const lng = start[0] + (end[0] - start[0]) * t;
+      const lat = start[1] + (end[1] - start[1]) * t;
+
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const normalX = segLen === 0 ? 0 : -dy / segLen;
+      const normalY = segLen === 0 ? 0 : dx / segLen;
+
+      return {
+        coordinates: [lng, lat],
+        normal: [normalX, normalY],
+        progress: targetDistance / Math.max(getRouteLengthMeters(coordinates), 1),
+      };
+    }
+
+    traversed += segLen;
+  }
+
+  return {
+    coordinates: coordinates[coordinates.length - 1],
+    normal: [0, 0],
+    progress: 1,
+  };
+}
+
+function buildGeneratedCueFeatures(routeFeature, routeType, timeMinutes = 90) {
+  const coordinates = routeFeature?.geometry?.coordinates || [];
+  if (coordinates.length < 2) return [];
+
+  const routeLength = getRouteLengthMeters(coordinates);
+  if (!routeLength) return [];
+
+  const count =
+  routeType === "adventure"
+    ? timeMinutes <= 30
+      ? 6
+      : timeMinutes <= 60
+      ? 10
+      : timeMinutes <= 90
+      ? 14
+      : timeMinutes <= 120
+      ? 18
+      : timeMinutes <= 150
+      ? 22
+      : timeMinutes <= 180
+      ? 26
+      : timeMinutes <= 210
+      ? 30
+      : 34
+    : timeMinutes <= 30
+    ? 2
+    : timeMinutes <= 60
+    ? 4
+    : timeMinutes <= 90
+    ? 5
+    : timeMinutes <= 120
+    ? 6
+    : 7;
+
+  const offsetMeters = routeType === "adventure" ? 10 : 6;
+  const generatedTypes =
+    routeType === "adventure"
+      ? ["transit", "shade", "crossing", "rest", "lighting", "shade"]
+      : ["transit", "crossing", "shade"];
+
+  const features = [];
+
+  for (let i = 0; i < count; i += 1) {
+    const progress = (i + 1) / (count + 1);
+    const targetDistance = routeLength * progress;
+    const point = getPointAtDistanceAlongRoute(coordinates, targetDistance);
+
+    if (!point) continue;
+
+    const [lng, lat] = point.coordinates;
+    const [nx, ny] = point.normal;
+    const side = i % 2 === 0 ? 1 : -1;
+    const displacedX = projectMeters(lng, lat)[0] + nx * offsetMeters * side;
+    const displacedY = projectMeters(lng, lat)[1] + ny * offsetMeters * side;
+    const displaced = unprojectMeters(displacedX, displacedY, lat);
+
+    const snappedBack = nearestPointOnPolyline(displaced, coordinates);
+    const categoryKey = generatedTypes[i % generatedTypes.length];
+    const category =
+      cueCategories.find((item) => item.key === categoryKey) || cueCategories[0];
+
+    features.push({
+      type: "Feature",
+      properties: {
+        id: `generated-${categoryKey}-${i}`,
+        type: categoryKey,
+        label: category.label,
+        name: category.label,
+        description: `This ${category.label.toLowerCase()} cue reinforces the rhythm of the route, letting the journey unfold through small spatial changes rather than explicit instruction.`,
+        generated: true,
+      },
+      geometry: {
+        type: "Point",
+        coordinates: snappedBack.coordinates,
+      },
+    });
+  }
+
+  return features;
+}
+
+function buildCueCorridorGeoJSON(
+  cueGroups,
+  routeFeature,
+  routeType,
+  timeMinutes = 90
+) {
   const features = [];
 
   cueGroups.forEach((group) => {
@@ -327,59 +619,22 @@ function buildCueCorridorGeoJSON(cueGroups, routeFeature, routeType) {
           label: group.label,
           name: item.name || group.label,
           description:
-            item.description ||
-            `${group.label} can help guide attention through the journey without relying on turn-by-turn instruction.`,
-          generated: false,
+  item.description ||
+  `This ${group.label.toLowerCase()} cue marks a subtle shift in the journey, drawing attention to how the street opens, slows, or redirects movement.`,
         },
         geometry: {
           type: "Point",
-          coordinates: [item.lng, item.lat],
+          coordinates: [
+            item.snappedLng ?? item.lng,
+            item.snappedLat ?? item.lat,
+          ],
         },
       });
     });
   });
 
-  const coordinates = routeFeature?.geometry?.coordinates || [];
-
-  if (coordinates.length >= 2) {
-    const generatedPoints = interpolatePointsAlongRoute(
-      coordinates,
-      routeType === "adventure" ? 24 : 12
-    );
-
-    const generatedTypes =
-      routeType === "adventure"
-        ? ["transit", "shade", "crossing", "rest", "lighting", "shade"]
-        : ["transit", "crossing", "shade"];
-
-        generatedPoints.forEach((coord, index) => {
-          if (routeType !== "adventure" && index % 2 !== 0) return;
-        
-          const type = generatedTypes[index % generatedTypes.length];
-          const category =
-            cueCategories.find((item) => item.key === type) || cueCategories[0];
-        
-          const spread = routeType === "adventure" ? 0.0014 : 0.0009;
-          const lngOffset = (Math.random() - 0.5) * spread * 2;
-          const latOffset = (Math.random() - 0.5) * spread * 0.6;
-        
-          features.push({
-            type: "Feature",
-            properties: {
-              id: `generated-${type}-${index}`,
-              type,
-              label: category.label,
-              name: category.label,
-              description: `A ${category.label.toLowerCase()} cue reinforces the spatial character of this part of the route.`,
-              generated: true,
-            },
-            geometry: {
-              type: "Point",
-              coordinates: [coord[0] + lngOffset, coord[1] + latOffset],
-            },
-          });
-        });
-  }
+  const generated = buildGeneratedCueFeatures(routeFeature, routeType, timeMinutes);
+  features.push(...generated);
 
   return {
     type: "FeatureCollection",
@@ -409,6 +664,7 @@ export default function MapView({
   const [legendOpen, setLegendOpen] = useState(false);
   const [highlightedCue, setHighlightedCue] = useState(null);
 
+
   const [visibleLayers, setVisibleLayers] = useState({
     heritage: true,
     transit: true,
@@ -426,105 +682,148 @@ export default function MapView({
     [travelMode]
   );
 
-  const narrativeCopy = useMemo(
-    () => getNarrativeCopy(routeType, travelMode),
-    [routeType, travelMode]
-  );
-
   const middleCount = useMemo(() => {
-    const minutes = timeMinutes < 10 ? timeMinutes * 60 : timeMinutes;
-
     if (routeType !== "adventure") return 1;
-    if (minutes <= 30) return 1;
-    if (minutes <= 60) return 2;
-    if (minutes <= 120) return 3;
-    if (minutes <= 180) return 4;
-    return 5;
+    if (timeMinutes <= 30) return 1;
+    if (timeMinutes <= 60) return 2;
+    if (timeMinutes <= 90) return 3;
+    if (timeMinutes <= 120) return 4;
+    if (timeMinutes <= 180) return 5;
+    return 6;
   }, [routeType, timeMinutes]);
 
   const visibleHeritageSites = useMemo(() => {
     if (!startSite || !endSite) return [];
-
+  
     const startAndEnd = [startSite, endSite].filter(Boolean);
-
-const uniqueSites = (sites) =>
-  sites.filter(
-    (site, index, arr) =>
-      arr.findIndex(
-        (s) => s.lng === site.lng && s.lat === site.lat
-      ) === index
-  );
-
+  
+    const uniqueSites = (sites) =>
+      sites.filter(
+        (site, index, arr) =>
+          arr.findIndex((s) => s.lng === site.lng && s.lat === site.lat) === index
+      );
+  
+    const routeLength = Math.hypot(
+      endSite.lng - startSite.lng,
+      endSite.lat - startSite.lat
+    );
+  
     const rankedSites = heritageSites
-    .filter((site) => site.adventure)
-
+      .filter((site) => site.name !== startSite.name && site.name !== endSite.name)
       .map((site) => {
-        const distToStart = Math.hypot(
-          site.lng - startSite.lng,
-          site.lat - startSite.lat
-        );
+        const distToStart = Math.hypot(site.lng - startSite.lng, site.lat - startSite.lat);
         const distToEnd = Math.hypot(site.lng - endSite.lng, site.lat - endSite.lat);
-
         const routeBalance = Math.abs(distToStart - distToEnd);
-
+        const baseWeight = site.cueWeight || 0;
+        const adventureBoost = site.adventure ? 2.5 : 0;
+        const guidedPenalty = site.adventure ? 0.6 : 0;
+      
+        const directionBias =
+          ((site.lat - startSite.lat) * (endSite.lat - startSite.lat) +
+            (site.lng - startSite.lng) * (endSite.lng - startSite.lng)) * 0.3;
+      
         return {
           ...site,
           distToStart,
           distToEnd,
           routeBalance,
+          directionBias,
+          routeScore:
+            routeType === "adventure"
+              ? routeBalance - baseWeight * 0.08 - adventureBoost - directionBias
+              : routeBalance + guidedPenalty - baseWeight * 0.01,
         };
       })
-      .sort((a, b) => {
-        if ((b.cueWeight || 0) !== (a.cueWeight || 0)) {
-          return (b.cueWeight || 0) - (a.cueWeight || 0);
-        }
-        return a.routeBalance - b.routeBalance;
-      });
-
-    const routeLength = Math.hypot(
-      endSite.lng - startSite.lng,
-      endSite.lat - startSite.lat
-    );
-
+      .sort((a, b) => a.routeScore - b.routeScore);
+  
     if (routeType === "direct") {
-      const guidedCount = routeLength < 0.015 ? 0 : routeLength < 0.03 ? 1 : 2;
-      return uniqueSites([...startAndEnd, ...rankedSites.slice(0, guidedCount)]);
+      const guidedCount =
+        timeMinutes <= 60 ? 1 : timeMinutes <= 120 ? 2 : 3;
+  
+      return uniqueSites([
+        ...startAndEnd,
+        ...rankedSites.slice(0, guidedCount),
+      ]);
     }
-
-    const candidates = rankedSites.filter(
+  
+    const exploratoryCount =
+      timeMinutes <= 30
+        ? 1
+        : timeMinutes <= 60
+        ? 2
+        : timeMinutes <= 90
+        ? 3
+        : timeMinutes <= 120
+        ? 4
+        : timeMinutes <= 180
+        ? 5
+        : 6;
+  
+    const exploratoryCandidates = rankedSites.filter(
       (site) =>
-        site.name !== startSite?.name &&
-        site.name !== endSite?.name
+        site.adventure ||
+        site.cueWeight >= 2 ||
+        routeLength > 0.025
     );
-    
-    const middleSites = [];
-    if (candidates.length > 0) {
-      for (let i = 0; i < middleCount; i += 1) {
-        const index = Math.floor(((i + 1) * candidates.length) / (middleCount + 1));
-        if (candidates[index]) {
-          middleSites.push(candidates[index]);
-        }
-      }
-    }
-    
-    return uniqueSites([
-      startSite,
-      ...middleSites,
-      endSite,
-    ].filter(Boolean));
+  
+    const middleSites = exploratoryCandidates.slice(0, exploratoryCount);
+  
+    return uniqueSites([startSite, ...middleSites, endSite].filter(Boolean));
+  }, [heritageSites, routeType, startSite, endSite, timeMinutes]);
 
-  }, [heritageSites, routeType, startSite, endSite, middleCount]);
 
   const cueGroups = useMemo(
-    () => buildCueGroups(routeType, currentRoute),
-    [routeType, currentRoute]
+    () => buildCueGroups(routeType, currentRoute, timeMinutes),
+    [routeType, currentRoute, timeMinutes]
   );
 
-  const cueCount = useMemo(
-    () => cueGroups.reduce((sum, group) => sum + group.items.length, 0),
-    [cueGroups]
+  const visibleCueGroups = useMemo(
+    () => cueGroups.filter((group) => visibleLayers[group.key]),
+    [cueGroups, visibleLayers]
   );
 
+const generatedCueCount = useMemo(() => {
+  if (!currentRoute?.geometry?.coordinates?.length) return 0;
+
+  if (routeType === "adventure") {
+    if (timeMinutes <= 30) return 6;
+    if (timeMinutes <= 60) return 10;
+    if (timeMinutes <= 90) return 14;
+    if (timeMinutes <= 120) return 18;
+    if (timeMinutes <= 150) return 22;
+    if (timeMinutes <= 180) return 26;
+    if (timeMinutes <= 210) return 30;
+    return 34;
+  }
+
+  if (timeMinutes <= 30) return 2;
+  if (timeMinutes <= 60) return 4;
+  if (timeMinutes <= 90) return 5;
+  if (timeMinutes <= 120) return 6;
+  return 7;
+}, [currentRoute, routeType, timeMinutes]);
+
+  const actualCueCount = useMemo(() => {
+    const visiblePickedCueCount = visibleCueGroups.reduce(
+      (sum, group) => sum + group.items.length,
+      0
+    );
+
+    return visiblePickedCueCount + generatedCueCount;
+  }, [visibleCueGroups, generatedCueCount]);
+
+  const narrativeCopy = useMemo(
+    () =>
+      getNarrativeCopy(
+        routeType,
+        travelMode,
+        timeMinutes,
+        visibleHeritageSites.length,
+        actualCueCount
+      ),
+    [routeType, travelMode, timeMinutes, visibleHeritageSites.length, actualCueCount]
+  );
+  
   useEffect(() => {
     if (!MAPBOX_TOKEN || mapRef.current || !mapContainerRef.current) return;
 
@@ -532,7 +831,7 @@ const uniqueSites = (sites) =>
 
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
-      style: "mapbox://styles/mapbox/light-v11",
+      style: "mapbox://styles/mapbox/streets-v12",
       center: LONDON_CENTER,
       zoom: 12.8,
       attributionControl: false,
@@ -573,17 +872,17 @@ const uniqueSites = (sites) =>
           "line-join": "round",
         },
         paint: {
-          "line-color": "#888",
+          "line-color": "#8f8a82",
           "line-width": [
             "interpolate",
             ["linear"],
             ["zoom"],
-            12, 60,
-            14, 120,
-            16, 180
+            12, 24,
+            14, 40,
+            16, 60
           ],
           "line-opacity": 0.12,
-          "line-blur": 2.5,
+          "line-blur": 0.6,
         },
       });
 
@@ -596,10 +895,10 @@ const uniqueSites = (sites) =>
           "line-join": "round",
         },
         paint: {
-          "line-color": "#888",
-          "line-width": 3,
-          "line-opacity": 0.25,
-          "line-dasharray": [1, 0],
+          "line-color": "#7c3aed",
+          "line-width": 4.8,
+          "line-opacity": 0.82,
+          "line-dasharray": [1.2, 1.8],
         },
       });
 
@@ -634,8 +933,8 @@ const uniqueSites = (sites) =>
             "rhythm", "#C58B00",
             "#999999",
           ],
-          "circle-opacity": 0.14,
-          "circle-blur": 1.2,
+          "circle-opacity": 0.18,
+          "circle-blur": 0.9,
           "circle-stroke-width": 0,
         },
       });
@@ -673,8 +972,8 @@ const uniqueSites = (sites) =>
           "circle-opacity": [
             "case",
             ["==", ["get", "generated"], true],
-            0.14,
-            0.35,
+            0.22,
+            0.58,
           ],
           "circle-stroke-color": "#ffffff",
           "circle-stroke-width": 1.2,
@@ -751,39 +1050,49 @@ const uniqueSites = (sites) =>
     const source = map.getSource("cue-points");
     if (!source) return;
 
-    const visibleCueGroups = cueGroups.filter((group) => visibleLayers[group.key]);
-
     source.setData(
-      buildCueCorridorGeoJSON(visibleCueGroups, currentRoute, routeType)
+      buildCueCorridorGeoJSON(
+        visibleCueGroups,
+        currentRoute,
+        routeType,
+        timeMinutes
+      )
     );
-  }, [cueGroups, visibleLayers, currentRoute, routeType, mapReady]);
+  }, [visibleCueGroups, currentRoute, routeType, timeMinutes, mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
-
+  
     if (map.getLayer("route-line")) {
       if (routeType === "adventure") {
-        map.setPaintProperty("route-line", "line-opacity", 0.08);
-        map.setPaintProperty("route-line", "line-width", 2);
-        map.setPaintProperty("route-line", "line-dasharray", [1.2, 2.4]);
+        map.setPaintProperty("route-line", "line-color", "#7c3aed");
+        map.setPaintProperty("route-line", "line-opacity", 0.82);
+        map.setPaintProperty("route-line", "line-width", 4.8);
+        map.setPaintProperty("route-line", "line-dasharray", [1.2, 1.8]);
       } else {
+        map.setPaintProperty("route-line", "line-color", "#2563eb");
         map.setPaintProperty("route-line", "line-opacity", 0.78);
-        map.setPaintProperty("route-line", "line-width", 3.2);
+        map.setPaintProperty("route-line", "line-width", 3.8);
         map.setPaintProperty("route-line", "line-dasharray", [1, 0]);
       }
     }
-
+  
     if (map.getLayer("route-corridor")) {
       map.setPaintProperty(
         "route-corridor",
+        "line-color",
+        routeType === "adventure" ? "#7c3aed" : "#2563eb"
+      );
+      map.setPaintProperty(
+        "route-corridor",
         "line-opacity",
-        routeType === "adventure" ? 0.14 : 0.1
+        routeType === "adventure" ? 0.14 : 0.08
       );
       map.setPaintProperty(
         "route-corridor",
         "line-width",
-        routeType === "adventure" ? 32 : 20
+        routeType === "adventure" ? 26 : 14
       );
     }
   }, [routeType, mapReady]);
@@ -806,74 +1115,37 @@ const uniqueSites = (sites) =>
         ? ["==", ["get", "type"], highlightedCue]
         : baseFilter;
 
-   
-        if (map.getLayer("cue-halo")) {
-          map.setFilter("cue-halo", baseFilter);
-        
-          map.setPaintProperty(
-            "cue-halo",
-            "circle-opacity",
-            highlightedCue
-              ? 0.3
-              : routeType === "adventure"
-              ? 0.18
-              : 0.12
-          );
-        
-          map.setPaintProperty(
-            "cue-halo",
-            "circle-radius",
-            routeType === "adventure"
-            ? [
-                "match",
-                ["get", "type"],
-                "shade", 36,
-                "water", 36,
-                "lighting", 28,
-                "transit", 26,
-                "crossing", 22,
-                "rest", 20,
-                "threshold", 22,
-                "rhythm", 20,
-                20,
-              ]
-              : [
-                  "match",
-                  ["get", "type"],
-                  "shade", 34,
-                  "water", 30,
-                  "lighting", 24,
-                  "transit", 22,
-                  "crossing", 20,
-                  "rest", 18,
-                  "threshold", 20,
-                  "rhythm", 18,
-                  18,
-                ]
-          );
-        }  
+    if (map.getLayer("cue-halo")) {
+      map.setFilter("cue-halo", baseFilter);
 
-        if (map.getLayer("cue-core")) {
-          map.setFilter("cue-core", highlightedFilter);
-        
-          map.setPaintProperty(
-            "cue-core",
-            "circle-opacity",
-            highlightedCue
-              ? [
-                  "case",
-                  ["==", ["get", "generated"], true],
-                  0.22,
-                  0.55,
-                ]
-              : [
-                  "case",
-                  ["==", ["get", "generated"], true],
-                  0.12,
-                  0.28,
-                ]
-          );
-        }
+      map.setPaintProperty(
+        "cue-halo",
+        "circle-opacity",
+        highlightedCue ? 0.3 : routeType === "adventure" ? 0.22 : 0.16
+      );
+    }
+
+    if (map.getLayer("cue-core")) {
+      map.setFilter("cue-core", highlightedFilter);
+
+      map.setPaintProperty(
+        "cue-core",
+        "circle-opacity",
+        highlightedCue
+          ? [
+              "case",
+              ["==", ["get", "generated"], true],
+              0.22,
+              0.55,
+            ]
+          : [
+              "case",
+              ["==", ["get", "generated"], true],
+              0.2,
+              0.42,
+            ]
+      );
+    }
   }, [visibleLayers, highlightedCue, routeType, mapReady]);
 
   useEffect(() => {
@@ -955,21 +1227,21 @@ const uniqueSites = (sites) =>
           `${startSite.lng},${startSite.lat}`,
           `${endSite.lng},${endSite.lat}`,
         ].join(";");
-        
+
         if (routeType === "adventure" && visibleHeritageSites.length > 2) {
           const viaSites = visibleHeritageSites
-          .filter(
-            (site) =>
-              site.name !== startSite?.name &&
-              site.name !== endSite?.name
-          )
-          .slice(0, middleCount);
+            .filter(
+              (site) =>
+                site.name !== startSite?.name &&
+                site.name !== endSite?.name
+            )
+            .slice(0, middleCount);
 
           if (viaSites.length > 0) {
             coordinatesForDirections = [
-              `${startSite.lng},${startSite.lat}`, 
+              `${startSite.lng},${startSite.lat}`,
               ...viaSites.map((site) => `${site.lng},${site.lat}`),
-              `${endSite.lng},${endSite.lat}`,     
+              `${endSite.lng},${endSite.lat}`,
             ].join(";");
           }
         }
@@ -1159,20 +1431,26 @@ const uniqueSites = (sites) =>
       </div>
 
       <div className="map-overlay bottom-right">
-        <div className="map-story-card">
-          <h4>
-            {routeType === "adventure"
-              ? `Explore by landmark · ${visibleHeritageSites.length} stops`
-              : narrativeCopy.title}
-          </h4>
-          <p>{narrativeCopy.description}</p>
+       <div className="map-story-card">
+  <h4>
+    {routeType === "adventure"
+      ? `Explore by landmark · ${visibleHeritageSites.length} stops · ${timeMinutes} min`
+      : `Follow nearby heritage · ${visibleHeritageSites.length} stops · ${timeMinutes} min`}
+  </h4>
 
-          <div className="story-stats">
-            <span>{visibleHeritageSites.length} stops</span>
-            <span>{cueCount} cues</span>
-            <span>{travelMode === "cycle" ? "Cycle mode" : "Walk mode"}</span>
-          </div>
-        </div>
+  <p>
+  {routeType === "adventure"
+    ? `This route gradually expands beyond the most direct path, drawing the journey into a wider urban corridor where movement slows and attention shifts between streets, spaces, and encounters.`
+    : `This guided ${travelMode === "cycle" ? "cycle" : "walk"} keeps the destination legible while still using nearby heritage and urban cues to make the route feel situated rather than automatic.`}
+</p>
+
+  <div className="story-stats">
+    <span>{timeMinutes} min</span>
+    <span>{visibleHeritageSites.length} stops</span>
+    <span>{actualCueCount} cues</span>
+    <span>{travelMode === "cycle" ? "Cycle mode" : "Walk mode"}</span>
+  </div>
+</div>
       </div>
 
       {popupSite ? (
@@ -1202,13 +1480,13 @@ const uniqueSites = (sites) =>
 
           <div className="popup-img">Story stop</div>
           <div className="popup-meta">
-            {popupSite?.isCue ? "Urban cue" : "Heritage anchor"}
+          {popupSite?.isCue ? "Spatial cue" : "Heritage stop"}
           </div>
           <div className="popup-name">{popupSite.name}</div>
           <div className="popup-desc">
-            {popupSite.description ||
-              "This place turns the journey into a spatial story, using the city itself as a guide rather than relying on turn-by-turn instruction."}
-          </div>
+  {popupSite.description ||
+    "This moment shifts the pace of the journey, letting attention move from destination alone toward the surrounding street, space, and atmosphere."}
+</div>
 
           <button
             type="button"

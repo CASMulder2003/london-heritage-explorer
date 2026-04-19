@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
-import Sidebar from "./components/Sidebar";
-import MapView from "./components/MapView";
 import { heritageSites } from "./data/heritageSites";
+import DesktopLayout from "./components/DesktopLayout";
+import MobileLayout from "./components/MobileLayout";
 
 const DEFAULT_TAB = "Journey";
 const DEFAULT_START = "St Pancras Old Church";
@@ -25,15 +25,29 @@ function findSiteByName(name) {
   return heritageSites.find((site) => site.name === name) || null;
 }
 
-function estimateDistanceKm(startSite, endSite, routeType) {
-  if (!startSite || !endSite) return routeType === "adventure" ? 4.8 : 2.6;
+function estimateDistanceKm(startSite, endSite, routeType, timeMinutes = 90) {
+  if (!startSite || !endSite) {
+    return routeType === "adventure" ? 5.4 : 2.6;
+  }
 
   const latKm = (startSite.lat - endSite.lat) * 111;
   const lngKm = (startSite.lng - endSite.lng) * 69;
   const straightLineKm = Math.sqrt(latKm ** 2 + lngKm ** 2);
 
-  const routeMultiplier = routeType === "adventure" ? 1.45 : 1.12;
-  return Math.max(1.2, straightLineKm * routeMultiplier);
+  if (routeType === "adventure") {
+    let multiplier = 1.42;
+
+    if (timeMinutes <= 60) multiplier = 1.35;
+    else if (timeMinutes <= 90) multiplier = 1.46;
+    else if (timeMinutes <= 120) multiplier = 1.58;
+    else if (timeMinutes <= 150) multiplier = 1.7;
+    else if (timeMinutes <= 180) multiplier = 1.82;
+    else multiplier = 1.95;
+
+    return Math.max(1.8, straightLineKm * multiplier);
+  }
+
+  return Math.max(1.2, straightLineKm * 1.12);
 }
 
 function estimateDurationMinutes(distanceKm, travelMode) {
@@ -42,7 +56,13 @@ function estimateDurationMinutes(distanceKm, travelMode) {
 }
 
 function buildStats(startSite, endSite, travelMode, routeType, timeMinutes) {
-  const distanceKm = estimateDistanceKm(startSite, endSite, routeType);
+  const distanceKm = estimateDistanceKm(
+    startSite,
+    endSite,
+    routeType,
+    timeMinutes
+  );
+
   const estimatedDuration = estimateDurationMinutes(distanceKm, travelMode);
 
   const durationMinutes =
@@ -69,11 +89,13 @@ export default function App() {
   const [timeMinutes, setTimeMinutes] = useState(90);
   const [selectedHeritage, setSelectedHeritage] = useState(null);
   const [isPanelOpen, setIsPanelOpen] = useState(true);
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
   const safeRouteType = useMemo(
     () => normalizeRouteType(routeType),
     [routeType]
   );
+
   const safeTravelMode = useMemo(
     () => normalizeTravelMode(travelMode),
     [travelMode]
@@ -139,56 +161,56 @@ export default function App() {
     setSelectedHeritage(null);
   }, [start, end, safeRouteType, safeTravelMode, timeMinutes]);
 
-  return (
-    <div className="app-shell">
-      <div className={`panel-shell ${isPanelOpen ? "open" : "closed"}`}>
-        <button
-          type="button"
-          className="panel-toggle"
-          onClick={() => setIsPanelOpen((prev) => !prev)}
-          aria-label={isPanelOpen ? "Close controls" : "Open controls"}
-        >
-          {isPanelOpen ? "Close" : "Journey"}
-        </button>
+  useEffect(() => {
+    function handleResize() {
+      setWindowWidth(window.innerWidth);
+    }
 
-        {isPanelOpen ? (
-          <Sidebar
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            start={start}
-            setStart={handleStartChange}
-            end={end}
-            setEnd={handleEndChange}
-            swapLocations={swapLocations}
-            travelMode={safeTravelMode}
-            setTravelMode={setTravelMode}
-            routeType={safeRouteType}
-            setRouteType={setRouteType}
-            timeMinutes={timeMinutes}
-            handleTimeChange={handleTimeChange}
-            timeStep={TIME_STEP}
-            stats={stats}
-            locations={locations}
-            selectedHeritage={selectedHeritage}
-            onSelectHeritage={setSelectedHeritage}
-          />
-        ) : null}
-      </div>
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
-      <main className="map-panel">
-        <MapView
-          startSite={startSite}
-          endSite={endSite}
-          heritageSites={heritageSites}
-          travelMode={safeTravelMode}
-          routeType={safeRouteType}
-          timeMinutes={timeMinutes}
-          stats={stats}
-          onSelectHeritage={setSelectedHeritage}
-          selectedHeritage={selectedHeritage}
-          sourceLabel={stats.sourceLabel}
-        />
-      </main>
-    </div>
+  const isMobile = windowWidth <= 768;
+
+  return isMobile ? (
+    <MobileLayout
+      heritageSites={heritageSites}
+      startSite={startSite}
+      endSite={endSite}
+      safeTravelMode={safeTravelMode}
+      safeRouteType={safeRouteType}
+      timeMinutes={timeMinutes}
+      stats={stats}
+      selectedHeritage={selectedHeritage}
+      setSelectedHeritage={setSelectedHeritage}
+    />
+  ) : (
+    <DesktopLayout
+      heritageSites={heritageSites}
+      isPanelOpen={isPanelOpen}
+      setIsPanelOpen={setIsPanelOpen}
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      start={start}
+      setStart={handleStartChange}
+      end={end}
+      setEnd={handleEndChange}
+      swapLocations={swapLocations}
+      travelMode={safeTravelMode}
+      setTravelMode={setTravelMode}
+      routeType={safeRouteType}
+      setRouteType={setRouteType}
+      timeMinutes={timeMinutes}
+      handleTimeChange={handleTimeChange}
+      timeStep={TIME_STEP}
+      stats={stats}
+      locations={locations}
+      selectedHeritage={selectedHeritage}
+      setSelectedHeritage={setSelectedHeritage}
+      startSite={startSite}
+      endSite={endSite}
+      safeTravelMode={safeTravelMode}
+      safeRouteType={safeRouteType}
+    />
   );
 }

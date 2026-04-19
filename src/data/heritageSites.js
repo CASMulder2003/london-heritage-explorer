@@ -28,7 +28,7 @@ export const heritageSites = [
     name: "British Library",
     period: "Modern cultural institution",
     description:
-      "A major national library and knowledge landmark closely linked to student research and everyday academic life around King's Cross and Bloomsbury.",
+      "This point gathers study, waiting, and movement together. It works as both landmark and threshold, linking academic routine to the larger flows of King’s Cross.",
     lat: 51.5299,
     lng: -0.1275,
     startEnd: true,
@@ -52,7 +52,7 @@ export const heritageSites = [
     name: "King's Cross Station",
     period: "Victorian transport infrastructure",
     description:
-      "A major railway landmark representing London's industrial expansion, mobility networks, and large-scale urban regeneration.",
+      "Here the scale of the city shifts. Movement intensifies as rail, streets, and public space converge, turning the journey from a local route into part of a larger urban network.",
     lat: 51.5308,
     lng: -0.1238,
     startEnd: false,
@@ -64,7 +64,7 @@ export const heritageSites = [
     name: "The Foundling Museum",
     period: "18th century social history",
     description:
-      "A museum connected to the Foundling Hospital, reflecting London's histories of care, reform, childhood, and philanthropy.",
+      "The atmosphere changes here. The route pulls away from major flows and into a quieter civic space, where attention settles and the journey becomes more reflective.",
     lat: 51.5258,
     lng: -0.1209,
     startEnd: false,
@@ -76,7 +76,7 @@ export const heritageSites = [
     name: "Charles Dickens Museum",
     period: "19th century literary heritage",
     description:
-      "A preserved Georgian townhouse associated with Charles Dickens and the literary and social histories of central London.",
+      "The city feels closer-grained here. Domestic scale, frontage, and quieter streets make this stretch of the journey feel less infrastructural and more intimate.",
     lat: 51.5236,
     lng: -0.1167,
     startEnd: false,
@@ -88,11 +88,11 @@ export const heritageSites = [
     name: "Senate House",
     period: "Art Deco, 1930s",
     description:
-      "An iconic academic building closely associated with Bloomsbury, UCL, and twentieth-century institutional London.",
+      "An academic landmark whose scale and position help reframe Bloomsbury as both destination and institutional landscape.",
     lat: 51.5247,
     lng: -0.1293,
-    startEnd: false,
-    adventure: true,
+    startEnd: true,
+    adventure: false,
     cueWeight: 2,
   },
   {
@@ -100,12 +100,12 @@ export const heritageSites = [
     name: "Granary Square",
     period: "Post-industrial regeneration",
     description:
-      "A contemporary public square shaped by King's Cross redevelopment, where former industrial infrastructure has been reworked into a civic cultural landscape.",
+      "The route opens out here. What was once industrial ground now works as a place of pause, gathering, and exposure, where movement slows and the wider landscape becomes easier to read.",
     lat: 51.5357,
     lng: -0.1258,
     startEnd: false,
     adventure: true,
-    cueWeight: 3,
+    cueWeight: 2,
   },
   {
     id: 10,
