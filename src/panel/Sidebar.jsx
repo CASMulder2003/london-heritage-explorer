@@ -1,4 +1,4 @@
-const tabs = ["Journey", "Landmarks"];
+const tabs = ["Journey", "Anchors"];
 
 function formatTime(minutes) {
   const total = Number(minutes) || 0;
@@ -38,8 +38,11 @@ export default function Sidebar({
   timeStep = 30,
   locations = [],
   routeStops = [],
+  anchorItems = [],
   selectedHeritage,
   setSelectedHeritage,
+  selectedCue,
+  setSelectedCue,
 }) {
   return (
     <aside className="sidebar">
@@ -184,43 +187,67 @@ export default function Sidebar({
         </>
       )}
 
-      {activeTab === "Landmarks" && (
-        <div className="tab-panel-placeholder">
-          <h3>Landmarks</h3>
-          <p>Tap a place to uncover its story.</p>
+{activeTab === "Anchors" && (
+  <div className="tab-panel-placeholder">
+    <h3>Anchors</h3>
+    <p>Key heritage stops and spatial cues along this route.</p>
 
-          {routeStops.length > 0 ? (
-            <div className="landmark-list">
-              {routeStops.map((site, index) => (
-                <button
-                  key={site.id || site.name}
-                  type="button"
-                  className={`landmark-row ${
-                    selectedHeritage?.id === site.id ? "active" : ""
-                  }`}
-                  onClick={() => setSelectedHeritage?.(site)}
-                >
-                  <span className="landmark-number">{index + 1}</span>
+    {anchorItems.length > 0 ? (
+      <div className="landmark-list">
+        {anchorItems.map((item) => {
+          if (item.kind === "heritage") {
+            const site = item.raw;
+            const isActive = selectedHeritage?.id === site?.id;
 
-                  <span className="landmark-copy">
-                    <span className="landmark-name">{site.name}</span>
-                    <span className="landmark-meta">
-                      {site.period || site.category || "Heritage stop"}
-                    </span>
-                    <span className="landmark-desc">
-                      {site.shortDescription ||
-                        site.description ||
-                        "Part of the current route story."}
-                    </span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="empty-state">No landmarks available for this route.</p>
-          )}
-        </div>
-      )}
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={`landmark-row ${isActive ? "active" : ""}`}
+                onClick={() => {
+                  setSelectedCue?.(null);
+                  setSelectedHeritage?.(site);
+                }}
+              >
+                <span className="landmark-number">{item.order}</span>
+
+                <span className="landmark-copy">
+                  <span className="landmark-name">{item.name}</span>
+                  <span className="landmark-meta">{item.period}</span>
+                  <span className="landmark-desc">{item.description}</span>
+                </span>
+              </button>
+            );
+          }
+
+          return (
+<button
+  key={item.id}
+  type="button"
+  className={`landmark-row cue-row ${
+    selectedCue?.id === item.raw?.id ? "active" : ""
+  }`}
+  onClick={() => {
+    setSelectedHeritage?.(null);
+    setSelectedCue?.(item.raw);
+  }}
+>
+  <span className="landmark-number cue-number">•</span>
+
+  <span className="landmark-copy">
+    <span className="landmark-name cue-name">{item.name}</span>
+    <span className="landmark-meta">{item.period}</span>
+    <span className="landmark-desc">{item.description}</span>
+  </span>
+</button>
+          );
+        })}
+      </div>
+    ) : (
+      <p className="empty-state">No anchors available for this route.</p>
+    )}
+  </div>
+)}
     </aside>
   );
 }

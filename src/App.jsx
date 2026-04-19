@@ -340,6 +340,7 @@ export default function App() {
   const [timeMinutes, setTimeMinutes] = useState(90);
   const [selectedHeritage, setSelectedHeritage] = useState(null);
   const [selectedNarrativeStep, setSelectedNarrativeStep] = useState(null);
+  const [selectedCue, setSelectedCue] = useState(null);
   const [isPanelOpen, setIsPanelOpen] = useState(true);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [storyOpen, setStoryOpen] = useState(false);
@@ -399,6 +400,186 @@ export default function App() {
     endSite,
   ]);
 
+  const sidebarCueAnchors = useMemo(() => {
+    return getSidebarCueAnchors(cueCatalog, safeRouteType);
+  }, [safeRouteType]);
+
+  function getCueDisplayName(cue) {
+    const key = getCueKey(cue);
+  
+    switch (key) {
+      case "heritage":
+        return "null";
+      case "transit":
+      case "bus":
+        return "Transit cue";
+      case "crossing":
+      case "signal":
+        return "Crossing cue";
+      case "threshold":
+        return "Threshold cue";
+      case "shade":
+      case "tree":
+        return "Shaded edge";
+      case "rest":
+      case "bench":
+        return "Rest point";
+      case "lighting":
+      case "lamp":
+        return "Lighting cue";
+      case "water":
+        return "Water cue";
+      case "rhythm":
+        return "Rhythm cue";
+      default:
+        return cue?.label || cue?.type || "Spatial cue";
+    }
+  }
+  
+  function getCuePhaseLabel(stepType) {
+    switch (stepType) {
+      case "start":
+        return "Starting cue";
+      case "orientation":
+        return "Orientation cue";
+      case "intensity":
+        return "Intensity cue";
+      case "transition":
+        return "Transition cue";
+      case "arrival":
+        return "Arrival cue";
+      default:
+        return "Spatial cue";
+    }
+  }
+
+
+  
+  function getCueKey(cue) {
+    return String(cue?.type || cue?.label || "")
+      .trim()
+      .toLowerCase();
+  }
+  
+  function getSidebarCueForStep(step) {
+    const cueItems = Array.isArray(step?.cues) ? step.cues : [];
+  
+    const nonHeritageCues = cueItems.filter((cue) => {
+      const key = getCueKey(cue);
+      return key && key !== "heritage";
+    });
+  
+    if (!nonHeritageCues.length) return null;
+  
+    const preferredByStep = {
+      start: ["threshold", "shade", "tree", "transit", "bus"],
+      orientation: ["crossing", "signal", "transit", "bus", "threshold"],
+      intensity: ["lighting", "lamp", "transit", "bus", "crossing", "signal"],
+      transition: ["rest", "bench", "shade", "tree", "threshold"],
+      arrival: ["rest", "bench", "lighting", "lamp", "threshold"],
+    };
+  
+    const preferredKeys = preferredByStep[step?.type] || [];
+  
+    for (const pref of preferredKeys) {
+      const matched = nonHeritageCues.find((cue) => getCueKey(cue) === pref);
+      if (matched) return matched;
+    }
+  
+    return nonHeritageCues[0];
+  }
+
+  function getSidebarCueAnchors(cueCatalog = [], routeType = "adventure") {
+    const usable = (cueCatalog || []).filter((cue) => {
+      const key = String(cue?.type || cue?.label || "").toLowerCase();
+      return key && key !== "heritage";
+    });
+  
+    if (!usable.length) return [];
+  
+    const preferred =
+      routeType === "adventure"
+        ? [
+            "transit",
+            "bus",
+            "crossing",
+            "signal",
+            "threshold",
+            "shade",
+            "tree",
+            "rest",
+            "bench",
+            "lighting",
+            "lamp",
+          ]
+        : ["transit", "crossing", "threshold", "shade", "rest"];
+  
+    const picked = [];
+    const used = new Set();
+  
+    preferred.forEach((type) => {
+      const match = usable.find((cue) => {
+        const key = String(cue?.type || cue?.label || "").toLowerCase();
+        const id = cue.id || `${cue.type}-${cue.label}`;
+        return key === type && !used.has(id);
+      });
+  
+      if (match) {
+        picked.push(match);
+        used.add(match.id || `${match.type}-${match.label}`);
+      }
+    });
+  
+    return picked.slice(0, 3);
+  }
+
+  const anchorItems = useMemo(() => {
+    const items = [];
+  
+    routeStops.forEach((site, index) => {
+      items.push({
+        kind: "heritage",
+        id: `heritage-${site.id}`,
+        order: items.length + 1,
+        heritageId: site.id,
+        name: site.name,
+        period: site.period || site.category || "Heritage stop",
+        description:
+          site.shortDescription ||
+          site.description ||
+          "A key heritage anchor on this route.",
+        raw: site,
+      });
+  
+      const cue = sidebarCueAnchors[index % Math.max(sidebarCueAnchors.length, 1)];
+      const cueName = cue ? getCueDisplayName(cue) : null;
+      
+      if (cue && cueName) {
+        items.push({
+          kind: "cue",
+          id: `cue-${cue.id || cue.type || cue.label}-${index}`,
+          order: items.length + 1,
+          cueType: cue.type || "cue",
+          name: cueName,
+          period:
+            index === 0
+              ? "Starting cue"
+              : index === routeStops.length - 1
+              ? "Arrival cue"
+              : "Spatial cue",
+          description: `This cue helps structure attention and movement along this route.`,
+          raw: {
+            ...cue,
+            name: cueName,
+            label: cueName,
+          },
+        });
+      }
+    });
+  
+    return items;
+  }, [routeStops, sidebarCueAnchors]);
+
   function handleTimeChange(delta) {
     setTimeMinutes((prev) => {
       const next = prev + delta;
@@ -422,7 +603,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (!["Journey", "Landmarks"].includes(activeTab)) {
+    if (!["Journey", "Anchors"].includes(activeTab)) {
       setActiveTab("Journey");
     }
   }, [activeTab]);
@@ -439,6 +620,7 @@ export default function App() {
 
   useEffect(() => {
     setSelectedHeritage(null);
+    setSelectedCue(null);
     setSelectedNarrativeStep(null);
     setStoryOpen(true);
   }, [start, end, safeRouteType, safeTravelMode, timeMinutes]);
@@ -472,6 +654,7 @@ export default function App() {
   const sharedProps = {
     heritageSites,
     routeStops,
+    anchorItems,
     segments,
     cueGroups,
     narrativeSteps,
@@ -485,6 +668,8 @@ export default function App() {
     stats,
     selectedHeritage,
     setSelectedHeritage,
+    selectedCue,
+    setSelectedCue,
   };
 
   return isMobile ? (

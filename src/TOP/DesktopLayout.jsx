@@ -28,11 +28,14 @@ export default function DesktopLayout({
   safeRouteType,
   heritageSites,
   routeStops,
+  anchorItems,
   segments,
   cueGroups,
   narrativeSteps,
   selectedNarrativeStep,
   setSelectedNarrativeStep,
+  selectedCue,
+  setSelectedCue,
   storyOpen,
   setStoryOpen,
 }) {
@@ -70,11 +73,14 @@ export default function DesktopLayout({
             setSelectedHeritage={setSelectedHeritage}
             heritageSites={heritageSites}
             routeStops={routeStops}
+            anchorItems={anchorItems}
             segments={segments}
             cueGroups={cueGroups}
             narrativeSteps={narrativeSteps}
             selectedNarrativeStep={selectedNarrativeStep}
             setSelectedNarrativeStep={setSelectedNarrativeStep}
+            selectedCue={selectedCue}
+            setSelectedCue={setSelectedCue}
             startSite={startSite}
             endSite={endSite}
             safeTravelMode={safeTravelMode}

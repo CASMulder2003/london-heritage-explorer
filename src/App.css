@@ -1279,6 +1279,21 @@ select {
   color: #2f2418;
 }
 
+.cue-row {
+  cursor: default;
+  background: rgba(123, 97, 255, 0.04);
+  border-style: dashed;
+}
+
+.cue-number {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.cue-name {
+  color: #5a4fcf;
+}
+
 /* ---------- Responsive ---------- */
 
 @media (max-width: 960px) {

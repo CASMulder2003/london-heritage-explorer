@@ -674,6 +674,8 @@ export default function MapView({
   narrativeSteps = [],
   selectedNarrativeStep,
   setSelectedNarrativeStep,
+  selectedCue,
+  setSelectedCue,
   sourceLabel = "Mapbox",
   storyOpen = true,
   setStoryOpen,
@@ -1243,6 +1245,7 @@ const generatedCueCount = useMemo(() => {
       const el = createHeritageMarker(isActive, isEndpoint);
 
       el.addEventListener("click", () => {
+        setSelectedCue?.(null);
         onSelectHeritage?.(site);
         setPopupDismissed(false);
         setActivePopupSite(site);
@@ -1282,17 +1285,28 @@ const generatedCueCount = useMemo(() => {
   }, [selectedHeritage, activePopupSite, mapReady]);
 
   useEffect(() => {
-    if (selectedHeritage) {
-      setActivePopupSite(selectedHeritage);
-    }
-  }, [selectedHeritage]);
+    if (!selectedCue) return;
+  
+    setPopupDismissed(false);
+    setActivePopupSite({
+      id: selectedCue.id,
+      name: selectedCue.name || selectedCue.label || "Spatial cue",
+      description:
+        selectedCue.description ||
+        "This spatial cue helps structure attention and movement through the city.",
+      lng: selectedCue.snappedLng ?? selectedCue.lng,
+      lat: selectedCue.snappedLat ?? selectedCue.lat,
+      isCue: true,
+    });
+  }, [selectedCue]);
 
   useEffect(() => {
     setPopupDismissed(false);
     setActivePopupSite(null);
     setHighlightedCue(null);
-  }, [startSite, endSite, routeType, timeMinutes]);
-
+    setSelectedCue?.(null);
+  }, [startSite, endSite, routeType, timeMinutes, setSelectedCue]);
+  
   useEffect(() => {
     if (!selectedHeritage || !narrativeSteps.length) return;
   
