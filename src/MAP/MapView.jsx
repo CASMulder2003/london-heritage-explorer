@@ -950,32 +950,32 @@ const generatedCueCount = useMemo(() => {
         source: "cue-points",
         paint: {
           "circle-radius": isMobileView
-            ? [
-                "case",
-                ["==", ["get", "generated"], true],
-                3,
-                [
-                  "match",
-                  ["get", "type"],
-                  "threshold", 6,
-                  "transit", 5,
-                  "lighting", 5,
-                  4
-                ]
+          ? [
+              "case",
+              ["==", ["get", "generated"], true],
+              3,
+              [
+                "match",
+                ["get", "type"],
+                "threshold", 6,
+                "transit", 5,
+                "lighting", 5,
+                4
               ]
-            : [
-                "case",
-                ["==", ["get", "generated"], true],
-                4,
-                [
-                  "match",
-                  ["get", "type"],
-                  "threshold", 7,
-                  "transit", 6,
-                  "lighting", 6,
-                  5
-                ]
-              ],
+            ]
+          : [
+              "case",
+              ["==", ["get", "generated"], true],
+              5,
+              [
+                "match",
+                ["get", "type"],
+                "threshold", 9,
+                "transit", 8,
+                "lighting", 8,
+                7
+              ]
+            ],
           "circle-color": [
             "match",
             ["get", "type"],
@@ -1131,6 +1131,20 @@ const generatedCueCount = useMemo(() => {
       highlightedCue && visibleLayers[highlightedCue]
         ? [highlightedCue]
         : activeCueKeys.filter((key) => visibleLayers[key]);
+
+        const zoom = map.getZoom();
+
+        const desktopGeneratedRadius =
+          zoom < 14 ? 4 : zoom < 15.5 ? 5 : 6;
+        
+        const desktopPrimaryRadius =
+          zoom < 14 ? 7 : zoom < 15.5 ? 9 : 11;
+        
+        const desktopSecondaryRadius =
+          zoom < 14 ? 5 : zoom < 15.5 ? 7 : 8;
+        
+        const desktopMutedRadius =
+          zoom < 14 ? 3 : zoom < 15.5 ? 4 : 5;    
   
     if (map.getLayer("cue-halo")) {
       map.setFilter("cue-halo", baseFilter);
@@ -1142,60 +1156,102 @@ const generatedCueCount = useMemo(() => {
           ? [
               "case",
               ["in", ["get", "type"], ["literal", emphasizedKeys]],
-              0.42,
-              0.05,
+              isMobileView ? 0.08 : 0.16,
+              isMobileView ? 0.01 : 0.05,
             ]
-          : routeType === "adventure"
-          ? 0.18
+          : isMobileView
+          ? 0.01
           : 0.12
       );
   
       map.setPaintProperty(
-        "cue-core",
+        "cue-halo",
         "circle-radius",
         emphasizedKeys.length
           ? [
               "case",
               ["in", ["get", "type"], ["literal", emphasizedKeys]],
-              [
-                "case",
-                ["==", ["get", "generated"], true],
-                isMobileView ? 4 : 5,
-                [
-                  "match",
-                  ["get", "type"],
-                  "threshold", isMobileView ? 7 : 8,
-                  "transit", isMobileView ? 6 : 7,
-                  "lighting", isMobileView ? 6 : 7,
-                  isMobileView ? 5 : 6,
-                ],
-              ],
-              [
-                "case",
-                ["==", ["get", "generated"], true],
-                isMobileView ? 2 : 3,
-                [
-                  "match",
-                  ["get", "type"],
-                  "threshold", isMobileView ? 4 : 5,
-                  "transit", isMobileView ? 3 : 4,
-                  "lighting", isMobileView ? 3 : 4,
-                  isMobileView ? 3 : 4,
-                ],
-              ],
+              isMobileView
+                ? [
+                    "match",
+                    ["get", "type"],
+                    "shade", 6,
+                    "water", 6,
+                    "lighting", 5,
+                    "transit", 5,
+                    "crossing", 4,
+                    "rest", 4,
+                    "threshold", 4,
+                    "rhythm", 4,
+                    4,
+                  ]
+                : [
+                    "match",
+                    ["get", "type"],
+                    "shade", 14,
+                    "water", 13,
+                    "lighting", 12,
+                    "transit", 12,
+                    "crossing", 11,
+                    "rest", 10,
+                    "threshold", 11,
+                    "rhythm", 10,
+                    10,
+                  ],
+              isMobileView
+                ? [
+                    "match",
+                    ["get", "type"],
+                    "shade", 0,
+                    "water", 0,
+                    "lighting", 0,
+                    "transit", 0,
+                    "crossing", 0,
+                    "rest", 0,
+                    "threshold", 0,
+                    "rhythm", 0,
+                    0,
+                  ]
+                : [
+                    "match",
+                    ["get", "type"],
+                    "shade", 8,
+                    "water", 7,
+                    "lighting", 7,
+                    "transit", 7,
+                    "crossing", 6,
+                    "rest", 6,
+                    "threshold", 6,
+                    "rhythm", 6,
+                    6,
+                  ],
+            ]
+          : isMobileView
+          ? [
+              "match",
+              ["get", "type"],
+              "shade", 0,
+              "water", 0,
+              "lighting", 0,
+              "transit", 0,
+              "crossing", 0,
+              "rest", 0,
+              "threshold", 0,
+              "rhythm", 0,
+              0,
             ]
           : [
-              "case",
-              ["==", ["get", "generated"], true],
-              isMobileView ? 3 : 4,
-              [
-                "match",
-                ["get", "type"],
-                "threshold", isMobileView ? 6 : 7,
-                "transit", isMobileView ? 5 : 6,
-                "lighting", isMobileView ? 5 : 6,
-                isMobileView ? 4 : 5,
-              ],
+              "match",
+              ["get", "type"],
+              "shade", 14,
+              "water", 13,
+              "lighting", 12,
+              "transit", 12,
+              "crossing", 11,
+              "rest", 10,
+              "threshold", 11,
+              "rhythm", 10,
+              10,
             ]
       );
     }
@@ -1204,20 +1260,21 @@ const generatedCueCount = useMemo(() => {
       map.setFilter("cue-core", baseFilter);
   
       map.setPaintProperty(
-        "cue-halo",
+        "cue-core",
         "circle-opacity",
         emphasizedKeys.length
           ? [
               "case",
               ["in", ["get", "type"], ["literal", emphasizedKeys]],
-              isMobileView ? 0.2 : 0.26,
-              isMobileView ? 0.03 : 0.04,
+              ["case", ["==", ["get", "generated"], true], 0.82, 0.98],
+              ["case", ["==", ["get", "generated"], true], 0.18, 0.28],
             ]
-          : isMobileView
-          ? 0.08
-          : routeType === "adventure"
-          ? 0.12
-          : 0.1
+          : [
+              "case",
+              ["==", ["get", "generated"], true],
+              0.82,
+              0.92,
+            ]
       );
   
       map.setPaintProperty(
@@ -1230,47 +1287,47 @@ const generatedCueCount = useMemo(() => {
               [
                 "case",
                 ["==", ["get", "generated"], true],
-                6,
+                isMobileView ? 4 : desktopGeneratedRadius,
                 [
                   "match",
                   ["get", "type"],
-                  "threshold", 9,
-                  "transit", 8,
-                  "lighting", 8,
-                  7,
+                  "threshold", isMobileView ? 7 : desktopPrimaryRadius,
+                  "transit", isMobileView ? 6 : desktopPrimaryRadius - 1,
+                  "lighting", isMobileView ? 6 : desktopPrimaryRadius - 1,
+                  isMobileView ? 5 : desktopSecondaryRadius,
                 ],
               ],
               [
                 "case",
                 ["==", ["get", "generated"], true],
-                3,
+                isMobileView ? 2 : desktopMutedRadius,
                 [
                   "match",
                   ["get", "type"],
-                  "threshold", 5,
-                  "transit", 4,
-                  "lighting", 4,
-                  4,
+                  "threshold", isMobileView ? 4 : desktopSecondaryRadius - 1,
+                  "transit", isMobileView ? 3 : desktopMutedRadius,
+                  "lighting", isMobileView ? 3 : desktopMutedRadius,
+                  isMobileView ? 3 : desktopMutedRadius,
                 ],
               ],
             ]
           : [
               "case",
               ["==", ["get", "generated"], true],
-              6,
+              isMobileView ? 3 : desktopGeneratedRadius,
               [
                 "match",
                 ["get", "type"],
-                "threshold", 9,
-                "transit", 8,
-                "lighting", 8,
-                7,
+                "threshold", isMobileView ? 6 : desktopPrimaryRadius - 1,
+                "transit", isMobileView ? 5 : desktopSecondaryRadius,
+                "lighting", isMobileView ? 5 : desktopSecondaryRadius,
+                isMobileView ? 4 : desktopMutedRadius + 2,
               ],
             ]
       );
     }
-  }, [visibleLayers, highlightedCue, activeCueKeys, routeType, mapReady]);
-
+  }, [visibleLayers, highlightedCue, activeCueKeys, routeType, mapReady, isMobileView, currentRoute]);
+  
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
