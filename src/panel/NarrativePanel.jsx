@@ -1,5 +1,6 @@
 export default function NarrativePanel({
   stats,
+  routeSummary,
   visibleHeritageSites = [],
   narrativeSteps = [],
   selectedHeritage,
@@ -11,25 +12,52 @@ export default function NarrativePanel({
   safeRouteType = "exploratory",
   onClose,
 }) {
-  const title =
-    safeRouteType === "adventure"
-      ? "Exploratory spatial story"
-      : "Guided heritage route";
+  const matchedStepFromHeritage =
+  selectedHeritage && narrativeSteps.length
+    ? narrativeSteps.find(
+        (step) =>
+          step.heritage?.id === selectedHeritage.id ||
+          step.heritage?.name === selectedHeritage.name
+      )
+    : null;
 
-  const summaryText =
-    safeRouteType === "adventure"
-      ? "This route moves beyond the most direct path, using landmarks and everyday spatial cues to turn routine travel into a more interpretive urban experience."
-      : "This route links heritage stops through a clearer and more structured journey, helping users follow cultural landmarks with less ambiguity.";
+const currentStep =
+  matchedStepFromHeritage ||
+  selectedNarrativeStep ||
+  narrativeSteps[0] ||
+  null;
 
-  const currentStep =
-    selectedNarrativeStep || narrativeSteps[0] || null;
+const currentStop =
+  currentStep?.heritage ||
+  selectedHeritage ||
+  visibleHeritageSites[0] ||
+  null;
+  
+const fallbackTitle =
+  safeRouteType === "adventure"
+    ? "Exploratory spatial story"
+    : "Guided heritage route";
 
-  const currentStop =
-    currentStep?.heritage ||
-    selectedHeritage ||
-    visibleHeritageSites[0] ||
-    null;
+const fallbackSummary =
+  safeRouteType === "adventure"
+    ? "This route moves beyond the most direct path, using landmarks and everyday spatial cues to turn routine travel into a more interpretive urban experience."
+    : "This route links heritage stops through a clearer and more structured journey, helping users follow cultural landmarks with less ambiguity.";
 
+const stepLabelMap = {
+  start: "Beginning the journey",
+  orientation: "Finding orientation",
+  intensity: "Entering intensity",
+  transition: "Moving through transition",
+  arrival: "Arriving at the destination",
+};
+
+const title = currentStep?.type
+  ? stepLabelMap[currentStep.type] || currentStep.title || fallbackTitle
+  : fallbackTitle;
+
+  const summaryText = currentStep?.text
+  ? currentStep.text.split(". ")[0] + "."
+  : fallbackSummary;
   return (
     <div className="narrative-panel">
       <div className="narrative-panel__inner">
@@ -51,17 +79,17 @@ export default function NarrativePanel({
           <p className="narrative-summary">{summaryText}</p>
 
           <div className="narrative-stats">
-            <span>{safeTravelMode === "cycle" ? "Cycle" : "Walk"}</span>
-            <span>{stats?.timeLabel || "1h"}</span>
-            <span>{visibleHeritageSites.length} stops</span>
-            <span>{stats?.cueCount || 0} cues</span>
-          </div>
+  <span>{routeSummary?.travelLabel || (safeTravelMode === "cycle" ? "Cycle" : "Walk")}</span>
+  <span>{routeSummary?.timeLabel || "1h"}</span>
+  <span>{routeSummary?.stopCount ?? visibleHeritageSites.length} stops</span>
+  <span>{routeSummary?.cueCount ?? 0} cues</span>
+</div>
 
-          <div className="narrative-route-line">
-            <strong>{startSite?.name || "Start"}</strong>
-            <span>→</span>
-            <strong>{endSite?.name || "End"}</strong>
-          </div>
+<div className="narrative-route-line">
+  <strong>{routeSummary?.startName || startSite?.name || "Start"}</strong>
+  <span>→</span>
+  <strong>{routeSummary?.endName || endSite?.name || "End"}</strong>
+</div>
         </section>
 
         <section className="narrative-section">

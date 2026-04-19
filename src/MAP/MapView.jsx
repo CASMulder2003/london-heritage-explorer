@@ -1445,7 +1445,20 @@ const generatedCueCount = useMemo(() => {
   ]);
 
   const popupSite = popupDismissed ? null : activePopupSite || selectedHeritage;
-
+  const routeSummary = {
+    travelLabel: travelMode === "cycle" ? "Cycle" : "Walk",
+    timeLabel:
+      timeMinutes < 60
+        ? `${timeMinutes} min`
+        : `${Math.floor(timeMinutes / 60)}h${
+            timeMinutes % 60 ? ` ${timeMinutes % 60}m` : ""
+          }`,
+    stopCount: visibleHeritageSites.length,
+    cueCount: displayCueCount,
+    startName: startSite?.name || "Start",
+    endName: endSite?.name || "End",
+  };
+  
   return (
     <div className="map-view">
       <div className="map-meta">
@@ -1542,16 +1555,9 @@ const generatedCueCount = useMemo(() => {
       {storyOpen && (
   <div className="map-story-drawer">
 <NarrativePanel
-  stats={{
-    ...stats,
-    cueCount: displayCueCount,
-    timeLabel:
-      timeMinutes < 60
-        ? `${timeMinutes} min`
-        : `${Math.floor(timeMinutes / 60)}h${
-            timeMinutes % 60 ? ` ${timeMinutes % 60}m` : ""
-          }`,
-  }}
+  key={`${startSite?.name}-${endSite?.name}-${timeMinutes}-${routeType}-${visibleHeritageSites.length}-${displayCueCount}`}
+  stats={stats}
+  routeSummary={routeSummary}
   visibleHeritageSites={visibleHeritageSites}
   narrativeSteps={narrativeSteps}
   selectedHeritage={selectedHeritage}
