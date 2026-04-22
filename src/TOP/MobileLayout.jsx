@@ -1,115 +1,314 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import MapView from "../MAP/MapView";
-import { heritageSites } from "../data/heritageSites";
+import SetupScreen from "../mobile/SetupScreen";
+import OverviewScreen from "../mobile/OverviewScreen";
+import NavigationScreen from "../mobile/NavigationScreen";
+import ArrivalScreen from "../mobile/ArrivalScreen";
+import SiteDetailScreen from "../mobile/SiteDetailScreen";
 
+const ARRIVAL_RADIUS_METERS = 40;
+
+function getDistanceMeters(from, to) {
+  if (!from || !to) return Infinity;
+  const R = 6371000;
+  const lat1 = (from.lat * Math.PI) / 180;
+  const lat2 = (to.lat * Math.PI) / 180;
+  const dLat = lat2 - lat1;
+  const dLng = ((to.lng - from.lng) * Math.PI) / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Stages: setup | overview | navigating | arrived | siteDetail | finished
 export default function MobileLayout({
-  startSite,
-  endSite,
-  safeTravelMode,
-  safeRouteType,
-  timeMinutes,
-  stats,
   routeStops = [],
+  stats,
   narrativeSteps = [],
   selectedNarrativeStep,
   setSelectedNarrativeStep,
-  selectedHeritage,
-  setSelectedHeritage,
-  selectedCue,
-  setSelectedCue,
-  routeType,
-  setRouteType,
-  handleTimeChange,
-  timeStep = 30,
+  onJourneyStart,
 }) {
-  const [storyOpen, setStoryOpen] = useState(false);
-  const [controlsOpen, setControlsOpen] = useState(true);
+  const [stage, setStage] = useState("setup");
+  const [travelMode, setTravelMode] = useState("walk");
+  const [timeMinutes, setTimeMinutes] = useState(45);
+  const [hasLiveLocation, setHasLiveLocation] = useState(false);
+  const [manualMode, setManualMode] = useState(false);
+  const [startSite, setStartSite] = useState(null);
+  const [endSite, setEndSite] = useState(null);
+
+  // Live location state
+  const [userCoords, setUserCoords] = useState(null);
+  const [deviceHeading, setDeviceHeading] = useState(null);
+  const watchRef = useRef(null);
+  const headingListenerRef = useRef(null);
+
+  // Anchor progression
+  const [currentAnchorIndex, setCurrentAnchorIndex] = useState(0);
+  const [arrivedSite, setArrivedSite] = useState(null);
+  const [siteDetail, setSiteDetail] = useState(null); // {site, description, image, wikiUrl}
+  const arrivedIds = useRef(new Set());
+
+  // ── Location tracking ────────────────────────────────────────────────────
+
+  function startLocationTracking() {
+    if (!navigator.geolocation) return;
+    watchRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setUserCoords(coords);
+        if (pos.coords.heading != null) setDeviceHeading(pos.coords.heading);
+      },
+      (err) => console.warn("Location watch error:", err),
+      { enableHighAccuracy: true, maximumAge: 2000 }
+    );
+  }
+
+  function startHeadingTracking() {
+    function handler(e) {
+      const heading =
+        e.webkitCompassHeading != null ? e.webkitCompassHeading
+        : e.alpha != null ? (360 - e.alpha) % 360
+        : null;
+      if (heading != null) setDeviceHeading(heading);
+    }
+    if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+      DeviceOrientationEvent.requestPermission()
+        .then((p) => { if (p === "granted") { window.addEventListener("deviceorientation", handler, true); headingListenerRef.current = handler; } })
+        .catch(() => {});
+    } else {
+      window.addEventListener("deviceorientation", handler, true);
+      headingListenerRef.current = handler;
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (watchRef.current != null) navigator.geolocation.clearWatch(watchRef.current);
+      if (headingListenerRef.current) window.removeEventListener("deviceorientation", headingListenerRef.current, true);
+    };
+  }, []);
+
+  // ── Arrival detection ────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (stage !== "navigating" || manualMode || !userCoords || !routeStops.length) return;
+    // Skip start point only
+    if (currentAnchorIndex === 0) return;
+    const target = routeStops[currentAnchorIndex];
+    if (!target || arrivedIds.current.has(target.id || target.name)) return;
+    const dist = getDistanceMeters(userCoords, { lat: target.lat, lng: target.lng });
+    if (dist <= ARRIVAL_RADIUS_METERS) {
+      arrivedIds.current.add(target.id || target.name);
+      // End destination — go straight to finished screen
+      if (currentAnchorIndex >= routeStops.length - 1) {
+        setStage("finished");
+      } else {
+        setArrivedSite(target);
+        setStage("arrived");
+      }
+    }
+  }, [userCoords, routeStops, currentAnchorIndex, stage, manualMode]);
+
+  // ── Setup complete ────────────────────────────────────────────────────────
+
+  const handleSetupStart = useCallback(({ startCoords, endCoords, endName, travelMode: tm, routeType: rt, timeMinutes: time, hasLiveLocation: hasLoc }) => {
+    setTravelMode(tm);
+    setTimeMinutes(time);
+    setHasLiveLocation(hasLoc);
+    setManualMode(!hasLoc);
+
+    const start = startCoords ? { name: "Your location", lat: startCoords.lat, lng: startCoords.lng } : null;
+    const end = { name: endName, lat: endCoords.lat, lng: endCoords.lng };
+    setStartSite(start);
+    setEndSite(end);
+
+    if (hasLoc && startCoords) {
+      setUserCoords(startCoords);
+      startLocationTracking();
+      startHeadingTracking();
+    }
+
+    onJourneyStart?.({ startCoords, endCoords, endName, travelMode: tm, routeType: rt, timeMinutes: time });
+    setStage("overview");
+  }, [onJourneyStart]);
+
+  // ── Begin navigation ──────────────────────────────────────────────────────
+
+  function handleBegin() {
+    // Start at index 1 — index 0 is the start point, not a heritage stop
+    setCurrentAnchorIndex(1);
+    arrivedIds.current.clear();
+    setArrivedSite(null);
+    setStage("navigating");
+  }
+
+  // ── Arrived → read more → continue ───────────────────────────────────────
+
+  function handleReadMore(detail) {
+    setSiteDetail(detail);
+    setStage("siteDetail");
+  }
+
+  function handleContinueFromDetail() {
+    setSiteDetail(null);
+    advanceToNext();
+  }
+
+  function handleContinueFromArrival() {
+    setArrivedSite(null);
+    advanceToNext();
+  }
+
+  function advanceToNext() {
+    const next = currentAnchorIndex + 1;
+    if (next >= routeStops.length) {
+      // Past the end — shouldn't happen but guard it
+      setStage("finished");
+    } else if (next === routeStops.length - 1) {
+      // Reached the end destination — go straight to finished
+      setCurrentAnchorIndex(next);
+      setStage("finished");
+    } else {
+      setCurrentAnchorIndex(next);
+      setStage("navigating");
+    }
+  }
+
+  function handleManualArrive() {
+    // Skip start (0) — only arrive at real heritage stops or end
+    if (currentAnchorIndex === 0) {
+      advanceToNext();
+      return;
+    }
+    // End destination — go straight to finished
+    if (currentAnchorIndex >= routeStops.length - 1) {
+      setStage("finished");
+      return;
+    }
+    const target = routeStops[currentAnchorIndex];
+    if (target) {
+      arrivedIds.current.add(target.id || target.name);
+      setArrivedSite(target);
+      setStage("arrived");
+    }
+  }
+
+  // ── Restart ───────────────────────────────────────────────────────────────
+
+  function handleRestart() {
+    setStage("setup");
+    setStartSite(null);
+    setEndSite(null);
+    setUserCoords(null);
+    setDeviceHeading(null);
+    setCurrentAnchorIndex(0);
+    setArrivedSite(null);
+    setSiteDetail(null);
+    arrivedIds.current.clear();
+    if (watchRef.current != null) { navigator.geolocation.clearWatch(watchRef.current); watchRef.current = null; }
+  }
+
+  const currentTarget = routeStops[currentAnchorIndex] || null;
+  // isLastSite when at the last real heritage stop (second to last overall)
+  const isLastSite = currentAnchorIndex === routeStops.length - 2;
+
+  // ── Setup — no map ────────────────────────────────────────────────────────
+
+  if (stage === "setup") {
+    return (
+      <div className="mobile-shell">
+        <SetupScreen onStart={handleSetupStart} />
+      </div>
+    );
+  }
+
+  // ── Site detail — full screen, no map ─────────────────────────────────────
+
+  if (stage === "siteDetail" && siteDetail) {
+    return (
+      <div className="mobile-shell">
+        <SiteDetailScreen
+          site={siteDetail.site}
+          description={siteDetail.description}
+          image={siteDetail.image}
+          wikiUrl={siteDetail.wikiUrl}
+          onContinue={handleContinueFromDetail}
+        />
+      </div>
+    );
+  }
+
+  // ── All other stages — map present ────────────────────────────────────────
 
   return (
     <div className="mobile-shell">
-      <div className="mobile-map">
+      <div className="mobile-map-container">
         <MapView
           startSite={startSite}
           endSite={endSite}
-          heritageSites={heritageSites}
           routeStops={routeStops}
-          travelMode={safeTravelMode}
-          routeType={safeRouteType}
+          travelMode={travelMode}
+          routeType="adventure"
           timeMinutes={timeMinutes}
-          stats={stats}
+          showRoute={false}
+          userCoords={userCoords}
+          deviceHeading={deviceHeading}
+          journeyStage={stage}
+          currentAnchorIndex={currentAnchorIndex}
           narrativeSteps={narrativeSteps}
           selectedNarrativeStep={selectedNarrativeStep}
           setSelectedNarrativeStep={setSelectedNarrativeStep}
-          selectedHeritage={selectedHeritage}
-          onSelectHeritage={setSelectedHeritage}
-          selectedCue={selectedCue}
-          setSelectedCue={setSelectedCue}
-          sourceLabel={stats?.sourceLabel}
-          storyOpen={storyOpen}
-          setStoryOpen={setStoryOpen}
+        >
+          {stage === "overview" && (
+            <OverviewScreen
+              stats={stats}
+              routeStops={routeStops}
+              travelMode={travelMode}
+              timeMinutes={timeMinutes}
+              onBegin={handleBegin}
+            />
+          )}
+
+          {stage === "navigating" && (
+            <NavigationScreen
+              userCoords={userCoords}
+              deviceHeading={deviceHeading}
+              currentTarget={currentTarget}
+              manualMode={manualMode}
+              onManualArrive={handleManualArrive}
+              travelMode={travelMode}
+              currentAnchorIndex={currentAnchorIndex}
+              totalStops={routeStops.length}
+              routeStops={routeStops}
+            />
+          )}
+
+          {stage === "finished" && (
+            <div className="mobile-finished-overlay">
+              <div className="mobile-finished-icon">✦</div>
+              <h2 className="mobile-finished-title">You've arrived</h2>
+              <p className="mobile-finished-text">
+                {routeStops.length > 2
+                  ? `You passed ${routeStops.length - 2} heritage site${routeStops.length - 2 !== 1 ? "s" : ""} on your way here. The city looks different when you slow down.`
+                  : "The city looks different when you slow down."}
+              </p>
+              <button type="button" className="mobile-finished-restart" onClick={handleRestart}>
+                Plan another journey
+              </button>
+            </div>
+          )}
+        </MapView>
+      </div>
+
+      {/* Arrival card — above the map */}
+      {stage === "arrived" && arrivedSite && (
+        <ArrivalScreen
+          site={arrivedSite}
+          onContinue={handleContinueFromArrival}
+          onReadMore={handleReadMore}
+          isLastSite={isLastSite}
         />
-      </div>
-
-      <div className="mobile-header">
-        <div className="mobile-pill">
-          {safeRouteType === "adventure" ? "Explore freely" : "Guided exploration"} ·{" "}
-          {safeTravelMode === "cycle" ? "Cycle" : "Walk"}
-        </div>
-      </div>
-
-      <button
-        type="button"
-        className="mobile-controls-toggle"
-        onClick={() => setControlsOpen((prev) => !prev)}
-      >
-        {controlsOpen ? "Hide controls" : "Controls"}
-      </button>
-
-      {controlsOpen && (
-        <div className="mobile-controls-sheet">
-          <div className="mobile-controls-card">
-            <div className="mobile-controls-section">
-              <div className="mobile-controls-label">Route style</div>
-              <div className="mobile-segmented">
-                <button
-                  type="button"
-                  className={safeRouteType === "direct" ? "active" : ""}
-                  onClick={() => setRouteType?.("direct")}
-                >
-                  Guided
-                </button>
-                <button
-                  type="button"
-                  className={safeRouteType === "adventure" ? "active" : ""}
-                  onClick={() => setRouteType?.("adventure")}
-                >
-                  Exploratory
-                </button>
-              </div>
-            </div>
-
-            <div className="mobile-controls-section">
-              <div className="mobile-controls-label">Time</div>
-              <div className="mobile-time-row">
-                <button type="button" onClick={() => handleTimeChange?.(-timeStep)}>
-                  −
-                </button>
-                <div className="mobile-time-value">{timeMinutes} min</div>
-                <button type="button" onClick={() => handleTimeChange?.(timeStep)}>
-                  +
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
-
-      <div className="mobile-bottom">
-        <div className="mobile-card">
-          <div>{stats?.distance}</div>
-          <div>{stats?.durationMinutes} min</div>
-        </div>
-      </div>
     </div>
   );
 }

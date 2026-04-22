@@ -1,122 +1,68 @@
-export const heritageSites = [
-  {
-    id: 1,
-    name: "Camden Lock",
-    period: "Industrial heritage",
-    description:
-      "A historic canal-side area shaped by trade, transport, and industrial activity in north London, now central to Camden's wider cultural landscape.",
-    lat: 51.5414,
-    lng: -0.1455,
-    startEnd: true,
-    adventure: false,
-    cueWeight: 2,
-  },
-  {
-    id: 2,
-    name: "St Pancras Old Church",
-    period: "Early Christian / Medieval",
-    description:
-      "One of the oldest Christian sites in England, associated with early parish history, burial grounds, and quieter reflective urban space.",
-    lat: 51.5306,
-    lng: -0.1259,
-    startEnd: true,
-    adventure: false,
-    cueWeight: 2,
-  },
-  {
-    id: 3,
-    name: "British Library",
-    period: "Modern cultural institution",
-    description:
-      "This point gathers study, waiting, and movement together. It works as both landmark and threshold, linking academic routine to the larger flows of King’s Cross.",
-    lat: 51.5299,
-    lng: -0.1275,
-    startEnd: true,
-    adventure: false,
-    cueWeight: 3,
-  },
-  {
-    id: 4,
-    name: "British Museum",
-    period: "18th century onwards",
-    description:
-      "A major civic and cultural landmark whose collections shaped London's role in global heritage narratives.",
-    lat: 51.5194,
-    lng: -0.1269,
-    startEnd: true,
-    adventure: false,
-    cueWeight: 3,
-  },
-  {
-    id: 5,
-    name: "King's Cross Station",
-    period: "Victorian transport infrastructure",
-    description:
-      "Here the scale of the city shifts. Movement intensifies as rail, streets, and public space converge, turning the journey from a local route into part of a larger urban network.",
-    lat: 51.5308,
-    lng: -0.1238,
-    startEnd: false,
-    adventure: true,
-    cueWeight: 3,
-  },
-  {
-    id: 6,
-    name: "The Foundling Museum",
-    period: "18th century social history",
-    description:
-      "The atmosphere changes here. The route pulls away from major flows and into a quieter civic space, where attention settles and the journey becomes more reflective.",
-    lat: 51.5258,
-    lng: -0.1209,
-    startEnd: false,
-    adventure: true,
-    cueWeight: 2,
-  },
-  {
-    id: 7,
-    name: "Charles Dickens Museum",
-    period: "19th century literary heritage",
-    description:
-      "The city feels closer-grained here. Domestic scale, frontage, and quieter streets make this stretch of the journey feel less infrastructural and more intimate.",
-    lat: 51.5236,
-    lng: -0.1167,
-    startEnd: false,
-    adventure: true,
-    cueWeight: 2,
-  },
-  {
-    id: 8,
-    name: "Senate House",
-    period: "Art Deco, 1930s",
-    description:
-      "An academic landmark whose scale and position help reframe Bloomsbury as both destination and institutional landscape.",
-    lat: 51.5247,
-    lng: -0.1293,
-    startEnd: true,
-    adventure: false,
-    cueWeight: 2,
-  },
-  {
-    id: 9,
-    name: "Granary Square",
-    period: "Post-industrial regeneration",
-    description:
-      "The route opens out here. What was once industrial ground now works as a place of pause, gathering, and exposure, where movement slows and the wider landscape becomes easier to read.",
-    lat: 51.5357,
-    lng: -0.1258,
-    startEnd: false,
-    adventure: true,
-    cueWeight: 2,
-  },
-  {
-    id: 10,
-    name: "Brunswick Centre",
-    period: "Modernist architecture, 1960s–70s",
-    description:
-      "A distinctive modernist complex linking housing, retail, and pedestrian circulation, adding a different architectural and urban rhythm to Bloomsbury.",
-    lat: 51.5232,
-    lng: -0.1233,
-    startEnd: false,
-    adventure: true,
-    cueWeight: 2,
-  },
-];
+import { siteDescriptions } from "./siteDescriptions";
+
+let _cache = null;
+
+export async function loadHeritageSites() {
+  if (_cache) return _cache;
+
+  const files = [
+    "/parks.geojson",
+    "/memorials.geojson",
+    "/churches.geojson",
+    "/listed.geojson",
+  ];
+
+  const results = await Promise.all(
+    files.map((f) =>
+      fetch(f).then((r) => {
+        if (!r.ok) throw new Error(`Failed to fetch ${f}: ${r.status}`);
+        return r.json();
+      })
+    )
+  );
+
+  let id = 1;
+  const sites = [];
+
+  results.forEach((geojson) => {
+    geojson.features.forEach((feature) => {
+      const props = feature.properties || {};
+      const [lng, lat] = feature.geometry.coordinates;
+      const name = props.name || "Unnamed site";
+
+      // Look up static description by name
+      const staticData = siteDescriptions[name] || {};
+
+      sites.push({
+        id: id++,
+        name,
+        category: props.category || "heritage",
+        lat,
+        lng,
+        wikipedia: props.wikipedia || null,
+        wikidata: props.wikidata || null,
+        // Static description — written to match walker tone
+        enrichedDescription: staticData.description || null,
+        // Image: prefer hardcoded override, then wikipedia_image from GeoJSON
+        image: staticData.image || props.image || props.wikipedia_image || null,
+        // Wikipedia URL — populated by enrichment script or manually
+        wikipediaUrl: props.wikipedia_url || null,
+        // Period label
+        period:
+          props.category === "park" ? "Green space"
+          : props.category === "memorial" ? "Memorial"
+          : props.category === "church" ? "Place of worship"
+          : props.category === "listed" ? "Grade I listed"
+          : "Heritage site",
+        // Route building
+        cueWeight: props.category === "park" ? 3 : 2,
+        adventure: props.category === "memorial" || props.category === "church",
+      });
+    });
+  });
+
+  _cache = sites;
+  return sites;
+}
+
+export const heritageSites = [];

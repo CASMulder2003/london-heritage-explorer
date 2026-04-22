@@ -1,94 +1,50 @@
-const NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org/search";
+// Mapbox Geocoding API — much better UK address support than Nominatim.
+// Uses the existing VITE_MAPBOX_TOKEN, no extra setup needed.
 
-async function runGeocode(query) {
-  const params = new URLSearchParams({
-    q: query.trim(),
-    format: "jsonv2",
-    limit: "1",
-    addressdetails: "1",
-    countrycodes: "gb",
-  });
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
-  const url = `${NOMINATIM_BASE_URL}?${params.toString()}`;
+export async function searchAddress(query) {
+  if (!query || query.trim().length < 2) return [];
+  if (!MAPBOX_TOKEN) return [];
 
   try {
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
+    const encoded = encodeURIComponent(query.trim());
+    const url =
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encoded}.json` +
+      `?access_token=${MAPBOX_TOKEN}` +
+      `&country=GB` +
+      `&proximity=-0.131,51.52` +
+      `&bbox=-0.21,51.48,-0.08,51.57` +
+      `&limit=5` +
+      `&types=address,poi,neighborhood,locality,place`;
+
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error(`Geocoding failed: ${res.status}`);
+
+    const data = await res.json();
+
+    return (data.features || []).map((f) => {
+      const shortName = f.address ? `${f.address} ${f.text}` : f.text;
+      return {
+        shortName,
+        displayName: f.place_name,
+        lat: f.center[1],
+        lng: f.center[0],
+      };
     });
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Geocoding failed: ${response.status} ${text}`);
-    }
-
-    return await response.json();
-  } catch (error) {
-    throw new Error(`Fetch failed for geocoding query "${query}": ${error.message}`);
+  } catch (err) {
+    console.error("Geocoding error:", err);
+    return [];
   }
-}
-
-function buildCandidateQueries(query) {
-  const q = query.trim();
-
-  const candidates = [
-    q,
-    `${q}, London`,
-    `${q}, London, UK`,
-  ];
-
-  if (/^ucl\b/i.test(q) || /gower street/i.test(q)) {
-    candidates.push(
-      "University College London, Gower Street, London",
-      "UCL Main Campus, Gower Street, London",
-      "Gower Street, London WC1E"
-    );
-  }
-
-  if (/camden/i.test(q)) {
-    candidates.push(
-      `${q}, Camden Town, London`,
-      `${q}, Camden, London NW1`,
-      "Camden Town, London"
-    );
-  }
-
-  return [...new Set(candidates)];
 }
 
 export async function geocodePlace(query) {
-  if (!query || !query.trim()) {
-    throw new Error("Missing geocoding query");
-  }
-
-  const candidates = buildCandidateQueries(query);
-  let lastError = null;
-
-  for (const candidate of candidates) {
-    try {
-      const results = await runGeocode(candidate);
-
-      if (Array.isArray(results) && results.length > 0) {
-        const best = results[0];
-
-        return {
-          lat: Number(best.lat),
-          lng: Number(best.lon),
-          displayName: best.display_name,
-          raw: best,
-          matchedQuery: candidate,
-        };
-      }
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  if (lastError) {
-    throw lastError;
-  }
-
-  throw new Error(`No geocoding result for: ${query}`);
+  const results = await searchAddress(query);
+  if (!results.length) throw new Error(`No result for: ${query}`);
+  return {
+    name: results[0].shortName,
+    lat: results[0].lat,
+    lng: results[0].lng,
+    displayName: results[0].displayName,
+  };
 }

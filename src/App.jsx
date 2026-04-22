@@ -1,717 +1,429 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import "./App.css";
-import { heritageSites } from "./data/heritageSites";
-import { cues as cueCatalog } from "./data/cues";
+import { loadHeritageSites } from "./data/heritageSites";
+import { preloadBoundary, isWithinCoverage, nearestBoundaryPoint } from "./services/boundary";
+import SplashScreen from "./components/SplashScreen";
+import DesktopSetupOverlay from "./TOP/DesktopSetupOverlay";
 import DesktopLayout from "./TOP/DesktopLayout";
 import MobileLayout from "./TOP/MobileLayout";
+import BoundsWarning from "./components/BoundsWarning";
 
-const DEFAULT_TAB = "Journey";
-const DEFAULT_START = "St Pancras Old Church";
-const DEFAULT_END = "Senate House";
-const MIN_TIME = 30;
-const MAX_TIME = 240;
-const TIME_STEP = 30;
+// ─── Mobile detection ─────────────────────────────────────────────────────────
 
-function normalizeRouteType(routeType) {
-  const value = String(routeType || "").toLowerCase();
-  return value === "direct" ? "direct" : "adventure";
-}
-
-function normalizeTravelMode(travelMode) {
-  const value = String(travelMode || "").toLowerCase();
-  return value === "cycle" ? "cycle" : "walk";
-}
-
-function findSiteByName(name) {
-  return heritageSites.find((site) => site.name === name) || null;
-}
-
-function estimateDistanceKm(startSite, endSite, routeType, timeMinutes = 90) {
-  if (!startSite || !endSite) {
-    return routeType === "adventure" ? 5.4 : 2.6;
-  }
-
-  const latKm = (startSite.lat - endSite.lat) * 111;
-  const lngKm = (startSite.lng - endSite.lng) * 69;
-  const straightLineKm = Math.sqrt(latKm ** 2 + lngKm ** 2);
-
-  if (routeType === "adventure") {
-    let multiplier = 1.42;
-
-    if (timeMinutes <= 60) multiplier = 1.35;
-    else if (timeMinutes <= 90) multiplier = 1.46;
-    else if (timeMinutes <= 120) multiplier = 1.58;
-    else if (timeMinutes <= 150) multiplier = 1.7;
-    else if (timeMinutes <= 180) multiplier = 1.82;
-    else multiplier = 1.95;
-
-    return Math.max(1.8, straightLineKm * multiplier);
-  }
-
-  return Math.max(1.2, straightLineKm * 1.12);
-}
-
-function estimateDurationMinutes(distanceKm, travelMode) {
-  const speedKmh = travelMode === "cycle" ? 14 : 4.8;
-  return Math.round((distanceKm / speedKmh) * 60);
-}
-
-function buildStats(startSite, endSite, travelMode, routeType, timeMinutes) {
-  const distanceKm = estimateDistanceKm(
-    startSite,
-    endSite,
-    routeType,
-    timeMinutes
+function checkIsMobile() {
+  return (
+    window.innerWidth <= 1024 ||
+    /Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
   );
+}
 
-  const estimatedDuration = estimateDurationMinutes(distanceKm, travelMode);
+// ─── Geometry helpers ─────────────────────────────────────────────────────────
 
-  const durationMinutes =
-    routeType === "adventure"
-      ? Math.max(
-          estimatedDuration,
-          Math.min(timeMinutes, estimatedDuration + 25)
-        )
-      : estimatedDuration;
+function toRad(deg) { return (deg * Math.PI) / 180; }
+
+function haversineMeters(a, b) {
+  const R = 6371000;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const sin2 =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(sin2), Math.sqrt(1 - sin2));
+}
+
+// Perpendicular distance from point P to segment A→B, in metres
+// Also returns t (0–1) = how far along the segment the nearest point is
+function distToSegment(p, a, b) {
+  const cosLat = Math.cos(toRad((a.lat + b.lat) / 2));
+  const ax = a.lng * cosLat, ay = a.lat;
+  const bx = b.lng * cosLat, by = b.lat;
+  const px = p.lng * cosLat, py = p.lat;
+  const dx = bx - ax, dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+  const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+  const nx = ax + t * dx, ny = ay + t * dy;
+  const degDist = Math.sqrt((px - nx) ** 2 + (py - ny) ** 2);
+  // Convert degrees to metres (approx)
+  const metersPerDeg = 111320 * Math.cos(toRad(p.lat));
+  return { distMeters: degDist * metersPerDeg, t };
+}
+
+// Minimum perpendicular distance from point to a polyline
+// Returns {distMeters, progress (0–1 along polyline)}
+function distToPolyline(p, coords) {
+  if (!coords || coords.length < 2) {
+    // Fall back to straight line from first to last
+    return { distMeters: Infinity, progress: 0 };
+  }
+  let best = Infinity, bestProgress = 0;
+  let totalLen = 0;
+  const segLens = [];
+  for (let i = 0; i < coords.length - 1; i++) {
+    const a = { lat: coords[i][1], lng: coords[i][0] };
+    const b = { lat: coords[i + 1][1], lng: coords[i + 1][0] };
+    const len = haversineMeters(a, b);
+    segLens.push(len);
+    totalLen += len;
+  }
+  let traversed = 0;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const a = { lat: coords[i][1], lng: coords[i][0] };
+    const b = { lat: coords[i + 1][1], lng: coords[i + 1][0] };
+    const { distMeters, t } = distToSegment(p, a, b);
+    if (distMeters < best) {
+      best = distMeters;
+      bestProgress = totalLen === 0 ? 0 : (traversed + segLens[i] * t) / totalLen;
+    }
+    traversed += segLens[i];
+  }
+  return { distMeters: best, progress: bestProgress };
+}
+
+// Straight-line corridor distance (no polyline available yet)
+function distToStraightLine(p, a, b) {
+  return distToSegment(p, a, b).distMeters;
+}
+
+function progressAlongLine(p, a, b) {
+  return distToSegment(p, a, b).t;
+}
+
+// ─── Route building ───────────────────────────────────────────────────────────
+
+const WALK_SPEED_KMH = 4.8;
+const CYCLE_SPEED_KMH = 14;
+
+function walkingMinutes(meters, travelMode) {
+  const speed = travelMode === "cycle" ? CYCLE_SPEED_KMH : WALK_SPEED_KMH;
+  return Math.round((meters / 1000 / speed) * 60);
+}
+
+function estimateTotalDistance(startSite, endSite, routeType) {
+  if (!startSite || !endSite) return 0;
+  const straight = haversineMeters(startSite, endSite);
+  // Road network is typically 1.3–1.5× straight line
+  return straight * (routeType === "direct" ? 1.3 : 1.45);
+}
+
+function buildStats(startSite, endSite, travelMode, routeType, timeMinutes, routeStops) {
+  if (!startSite || !endSite) return { distance: "—", durationMinutes: 0 };
+
+  // Calculate total distance through all stops
+  const stops = routeStops.length > 0 ? routeStops : [startSite, endSite];
+  let totalMeters = 0;
+  for (let i = 0; i < stops.length - 1; i++) {
+    totalMeters += haversineMeters(stops[i], stops[i + 1]) * 1.35;
+  }
+
+  const speed = travelMode === "cycle" ? CYCLE_SPEED_KMH : WALK_SPEED_KMH;
+  const durationMinutes = Math.round((totalMeters / 1000 / speed) * 60);
 
   return {
-    distance: `${distanceKm.toFixed(1)} km`,
+    distance: `${(totalMeters / 1000).toFixed(1)} km`,
     durationMinutes,
-    sourceLabel: "Mapbox",
   };
 }
 
-function buildRouteStops(startSite, endSite, routeType, timeMinutes) {
-  if (!startSite || !endSite) return [];
+// ─── CORRIDOR ROUTING ─────────────────────────────────────────────────────────
+//
+// Strategy:
+// 1. Find all heritage sites within a corridor around the route line
+// 2. For DIRECT: use very tight corridor (150m), order by progress along route
+// 3. For EXPLORATORY: wider corridor (400m for direct path, with small diversions),
+//    select evenly spaced stops based on time available
+// 4. No site should make the route wildly longer — cap detour distance
 
-  const uniqueSites = (sites) =>
-    sites.filter(
-      (site, index, arr) => arr.findIndex((s) => s.id === site.id) === index
-    );
+function buildRouteStops(startSite, endSite, routeType, timeMinutes, travelMode, heritageSites, routeGeometry) {
+  if (!startSite || !endSite || !heritageSites?.length) return [];
 
-  const routeLength = Math.hypot(
-    endSite.lng - startSite.lng,
-    endSite.lat - startSite.lat
-  );
+  const directDistMeters = haversineMeters(startSite, endSite);
+  const hasRealRoute = routeGeometry && routeGeometry.length >= 2;
 
-  const rankedSites = heritageSites
-    .filter((site) => site.id !== startSite.id && site.id !== endSite.id)
-    .map((site) => {
-      const distToStart = Math.hypot(
-        site.lng - startSite.lng,
-        site.lat - startSite.lat
-      );
-      const distToEnd = Math.hypot(site.lng - endSite.lng, site.lat - endSite.lat);
+  // Corridor widths
+  const corridorWidth = routeType === "direct" ? 180 : 450;
 
-      const routeBalance = Math.abs(distToStart - distToEnd);
-      const distanceToLine = distToStart + distToEnd;
-      const baseWeight = site.cueWeight || 0;
-      const adventureBoost = site.adventure ? 2.5 : 0;
-      const guidedPenalty = site.adventure ? 0.6 : 0;
-
-      const directionBias =
-        ((site.lat - startSite.lat) * (endSite.lat - startSite.lat) +
-          (site.lng - startSite.lng) * (endSite.lng - startSite.lng)) *
-        0.3;
-
-      return {
-        ...site,
-        routeScore:
-          routeType === "adventure"
-            ? routeBalance +
-              distanceToLine * 0.15 -
-              baseWeight * 0.08 -
-              adventureBoost -
-              directionBias
-            : routeBalance +
-              distanceToLine * 0.18 +
-              guidedPenalty -
-              baseWeight * 0.01,
-      };
+  // Score and filter sites
+  const candidates = heritageSites
+    .filter((s) => {
+      const sameAsStart = s.name === startSite.name || (s.id && s.id === startSite.id);
+      const sameAsEnd = s.name === endSite.name || (s.id && s.id === endSite.id);
+      return !sameAsStart && !sameAsEnd;
     })
-    .sort((a, b) => a.routeScore - b.routeScore);
+    .map((site) => {
+      let distMeters, progress;
+
+      if (hasRealRoute) {
+        const result = distToPolyline(site, routeGeometry);
+        distMeters = result.distMeters;
+        progress = result.progress;
+      } else {
+        // Fall back to straight-line corridor
+        distMeters = distToStraightLine(site, startSite, endSite);
+        progress = progressAlongLine(site, startSite, endSite);
+      }
+
+      // How much does visiting this site add to the total journey distance?
+      const prevStop = startSite; // simplified — in full impl we'd chain these
+      const detourMeters = haversineMeters(site, startSite) + haversineMeters(site, endSite) - directDistMeters;
+
+      return { ...site, distMeters, progress, detourMeters };
+    })
+    .filter((s) => {
+      // Must be within corridor
+      if (s.distMeters > corridorWidth) return false;
+      // Must lie between start and end (progress 0–1), with small buffer
+      if (s.progress < 0.02 || s.progress > 0.98) return false;
+      // For direct mode, no large detours
+      if (routeType === "direct" && s.detourMeters > 500) return false;
+      return true;
+    })
+    .sort((a, b) => a.progress - b.progress); // sort by position along route
 
   if (routeType === "direct") {
-    const guidedCount =
-      timeMinutes <= 60 ? 1 : timeMinutes <= 120 ? 2 : timeMinutes <= 180 ? 3 : 4;
-
-    return uniqueSites([startSite, ...rankedSites.slice(0, guidedCount), endSite]);
+    // Direct: just take all sites in the corridor, ordered by route progress
+    // Cap at 8 stops max regardless
+    const stops = [startSite, ...candidates.slice(0, 8), endSite];
+    return deduplicateStops(stops);
   }
 
-  const exploratoryCount =
-    timeMinutes <= 30
-      ? 1
-      : timeMinutes <= 60
-      ? 2
-      : timeMinutes <= 90
-      ? 3
-      : timeMinutes <= 120
-      ? 4
-      : timeMinutes <= 150
-      ? 5
-      : timeMinutes <= 180
-      ? 6
-      : 7;
+  // Exploratory: select stops based on time available
+  // Estimate how many stops fit in the time
+  const speed = travelMode === "cycle" ? CYCLE_SPEED_KMH : WALK_SPEED_KMH;
+  const totalDistKm = (directDistMeters * 1.45) / 1000;
+  const travelTimeMinutes = (totalDistKm / speed) * 60;
+  const pauseTimePerStop = 8; // minutes spent at each heritage stop
+  const availableForStops = timeMinutes - travelTimeMinutes;
+  const maxStopsFromTime = Math.max(1, Math.floor(availableForStops / pauseTimePerStop));
 
-  const exploratoryCandidates = rankedSites.filter(
-    (site) => site.adventure || site.cueWeight >= 2 || routeLength > 0.02
-  );
+  // Cap between 1 and 6 (2h max, ~5 sites is realistic)
+  const targetCount = Math.min(6, Math.max(1, maxStopsFromTime));
 
-  return uniqueSites([
-    startSite,
-    ...exploratoryCandidates.slice(0, exploratoryCount),
-    endSite,
-  ]);
+  // Pick evenly spaced stops along the corridor
+  const selected = pickEvenlySpaced(candidates, targetCount);
+
+  const stops = [startSite, ...selected, endSite];
+  return deduplicateStops(stops);
 }
 
-function buildSegmentsFromStops(stops, routeType) {
-  if (!stops.length) return [];
+// Pick N sites that are as evenly spaced as possible along the route
+function pickEvenlySpaced(candidates, n) {
+  if (candidates.length === 0) return [];
+  if (candidates.length <= n) return candidates;
 
-  if (stops.length === 1) {
-    return [
-      {
-        id: `${stops[0].id}-only`,
-        type: "arrival",
-        title: stops[0].name,
-        heritage: stops[0],
-        order: 0,
-      },
-    ];
-  }
+  // Divide the route (0–1) into n+1 equal segments, pick closest site to each division point
+  const selected = [];
+  const used = new Set();
 
-  return stops.map((stop, index) => {
-    let type = "transition";
-
-    if (index === 0) type = "start";
-    else if (index === stops.length - 1) type = "arrival";
-    else if (routeType === "adventure" && index === Math.floor(stops.length / 2)) {
-      type = "intensity";
-    } else if (index <= 1) {
-      type = "orientation";
-    }
-
-    return {
-      id: `${stop.id}-${index}`,
-      type,
-      title: stop.name,
-      heritage: stop,
-      order: index,
-    };
-  });
-}
-
-function buildCueGroups(segments, routeType, timeMinutes) {
-  return segments.map((segment) => {
-    const isAdventure = routeType === "adventure";
-
-    const baseCueCount = isAdventure ? 4 : 2;
-    const timeBoost = timeMinutes >= 120 ? 2 : timeMinutes >= 90 ? 1 : 0;
-    const cueCount = baseCueCount + timeBoost;
-
-    const source =
-      Array.isArray(cueCatalog) && cueCatalog.length
-        ? cueCatalog
-        : [
-            { type: "tree", label: "Tree cover" },
-            { type: "bench", label: "Rest points" },
-            { type: "signal", label: "Crossings" },
-            { type: "lamp", label: "Street lighting" },
-            { type: "bus", label: "Transit rhythm" },
-          ];
-
-    const selected = source.slice(0, cueCount).map((cue, cueIndex) => {
-      let intensity = "medium";
-
-      if (segment.type === "start") intensity = cueIndex === 0 ? "low" : "medium";
-      if (segment.type === "orientation") intensity = "medium";
-      if (segment.type === "intensity") intensity = cueIndex < 2 ? "high" : "medium";
-      if (segment.type === "arrival") intensity = cueIndex === 0 ? "high" : "low";
-
-      return {
-        ...cue,
-        intensity,
-      };
+  for (let i = 1; i <= n; i++) {
+    const targetProgress = i / (n + 1);
+    let best = null, bestDist = Infinity;
+    candidates.forEach((site) => {
+      if (used.has(site.id || site.name)) return;
+      const d = Math.abs(site.progress - targetProgress);
+      if (d < bestDist) { bestDist = d; best = site; }
     });
-
-    return {
-      segmentId: segment.id,
-      count: selected.length,
-      items: selected,
-    };
-  });
-}
-
-function buildNarrativeText(
-  segment,
-  cues,
-  routeType,
-  startSite,
-  endSite,
-  timeMinutes
-) {
-  const cueLabels = (cues.items || [])
-    .map((item) => item.label || item.type)
-    .slice(0, 3);
-
-  const cueSummary =
-    cueLabels.length > 0 ? cueLabels.join(", ").toLowerCase() : "everyday cues";
-
-  const fromName = startSite?.name || "the starting point";
-  const toName = endSite?.name || "the destination";
-
-  const longJourney = timeMinutes >= 120;
-  const exploratory = routeType === "adventure";
-
-  const routeContext = exploratory
-    ? longJourney
-      ? `This longer exploratory route creates more room for drift between ${fromName} and ${toName}, allowing the journey to gather meaning gradually through the street environment.`
-      : `This exploratory route between ${fromName} and ${toName} loosens the most direct path and lets small cues shape how the city is read.`
-    : `This guided route between ${fromName} and ${toName} keeps the destination legible while still using nearby landmarks and cues to situate the journey in place.`;
-
-  switch (segment.type) {
-    case "start":
-      return exploratory
-        ? `${routeContext} The journey begins at ${segment.title}, where attention is first anchored before the route begins to open outward through ${cueSummary}.`
-        : `${routeContext} Starting at ${segment.title}, the route establishes a clear point of departure and uses ${cueSummary} to support orientation without over-directing movement.`;
-
-    case "orientation":
-      return exploratory
-        ? `Here the route starts to loosen. Rather than prescribing each turn, it invites movement through ${cueSummary}, encouraging the user to notice transitions in pace, frontage, and atmosphere.`
-        : `This segment keeps movement readable and stable. Cues such as ${cueSummary} help maintain direction while still making the surrounding street feel present.`;
-
-    case "intensity":
-      return exploratory
-        ? `Here the route becomes denser and more urban. The accumulation of ${cueSummary} shifts the journey from quiet orientation into a more public and layered landscape, making movement itself part of the story.`
-        : `This is the most active portion of the route, where ${cueSummary} gather more closely and reinforce the sense of arrival into a busier urban corridor.`;
-
-    case "arrival":
-      return exploratory
-        ? `The route resolves at ${segment.title}, where earlier cues and landmarks gather into a final stop. Rather than ending as pure efficiency, the journey arrives with a stronger sense of spatial transition and urban context.`
-        : `The route concludes at ${segment.title}. The destination remains clear throughout, but the journey still arrives with a richer awareness of how nearby streets, landmarks, and cues shape the approach.`;
-
-    default:
-      return exploratory
-        ? `This segment expands beyond the most direct path. Cues such as ${cueSummary} turn routine movement into a more exploratory encounter with the city.`
-        : `This segment keeps the route legible and focused, using ${cueSummary} to support orientation without overwhelming the journey.`;
+    if (best) {
+      selected.push(best);
+      used.add(best.id || best.name);
+    }
   }
+
+  return selected.sort((a, b) => a.progress - b.progress);
 }
 
-function buildNarrativeSteps(
-  segments,
-  cueGroups,
-  routeType,
-  timeMinutes,
-  startSite,
-  endSite
-) {
-  return segments.map((segment, index) => {
-    const cues = cueGroups[index] || { items: [], count: 0 };
-
-    return {
-      id: segment.id,
-      order: index + 1,
-      type: segment.type,
-      title: segment.title,
-      heritage: segment.heritage,
-      cueCount: cues.count,
-      cues: cues.items,
-      durationLabel: `${Math.max(
-        10,
-        Math.round(timeMinutes / Math.max(segments.length, 1))
-      )} min`,
-      text: buildNarrativeText(
-        segment,
-        cues,
-        routeType,
-        startSite,
-        endSite,
-        timeMinutes
-      ),
-    };
+function deduplicateStops(stops) {
+  const seen = new Set();
+  return stops.filter((s) => {
+    const key = s.id || s.name;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
 }
+
+// Calculate walking times between consecutive stops
+function buildStopTimes(stops, travelMode) {
+  return stops.map((stop, i) => {
+    if (i === 0) return { ...stop, minutesFromPrev: 0, distFromPrev: 0 };
+    const prev = stops[i - 1];
+    const meters = haversineMeters(prev, stop) * 1.35; // road factor
+    const minutes = walkingMinutes(meters, travelMode);
+    return { ...stop, minutesFromPrev: minutes, distFromPrev: Math.round(meters) };
+  });
+}
+
+function buildAnchorItems(routeStops, travelMode) {
+  const timed = buildStopTimes(routeStops, travelMode);
+  return timed.map((site, i) => ({
+    kind: "heritage",
+    id: `heritage-${site.id || site.name}`,
+    order: i,
+    heritageId: site.id,
+    name: site.name,
+    period: site.period || "Heritage stop",
+    description: site.enrichedDescription || site.description || "",
+    minutesFromPrev: site.minutesFromPrev,
+    distFromPrev: site.distFromPrev,
+    raw: site,
+  }));
+}
+
+// ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState(DEFAULT_TAB);
-  const [start, setStart] = useState(DEFAULT_START);
-  const [end, setEnd] = useState(DEFAULT_END);
+  const [splashDone, setSplashDone] = useState(false);
+  const [dataReady, setDataReady] = useState(false);
+  const [heritageSites, setHeritageSites] = useState([]);
+  const [isMobile, setIsMobile] = useState(() => checkIsMobile());
+
+  // Route geometry from MapView — used to refine stop selection
+  const [routeGeometry, setRouteGeometry] = useState(null);
+
+  // Load data
+  useEffect(() => {
+    Promise.all([loadHeritageSites(), preloadBoundary()])
+      .then(([sites]) => { setHeritageSites(sites); setDataReady(true); })
+      .catch(() => setDataReady(true));
+  }, []);
+
+  useEffect(() => {
+    function onResize() { setIsMobile(checkIsMobile()); }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  // Desktop state
+  const [desktopJourney, setDesktopJourney] = useState(null);
+  const [desktopBoundsWarning, setDesktopBoundsWarning] = useState(null);
+
+  // Shared journey state
+  const [startSite, setStartSite] = useState(null);
+  const [endSite, setEndSite] = useState(null);
   const [travelMode, setTravelMode] = useState("walk");
-  const [routeType, setRouteType] = useState("adventure");
-  const [timeMinutes, setTimeMinutes] = useState(90);
-  const [selectedHeritage, setSelectedHeritage] = useState(null);
-  const [selectedNarrativeStep, setSelectedNarrativeStep] = useState(null);
-  const [selectedCue, setSelectedCue] = useState(null);
-  const [isPanelOpen, setIsPanelOpen] = useState(true);
-  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
-  const [storyOpen, setStoryOpen] = useState(false);
+  const [routeType, setRouteType] = useState("exploratory");
+  const [timeMinutes, setTimeMinutes] = useState(60);
+  const [selectedSite, setSelectedSite] = useState(null);
 
-  const safeRouteType = useMemo(
-    () => normalizeRouteType(routeType),
-    [routeType]
-  );
+  // Called by MapView when route geometry is loaded
+  const handleRouteGeometry = useCallback((coords) => {
+    setRouteGeometry(coords);
+  }, []);
 
-  const safeTravelMode = useMemo(
-    () => normalizeTravelMode(travelMode),
-    [travelMode]
-  );
-
-  const locations = useMemo(() => heritageSites.map((site) => site.name), []);
-
-  const startSite = useMemo(() => findSiteByName(start), [start]);
-  const endSite = useMemo(() => findSiteByName(end), [end]);
-
-  const stats = useMemo(() => {
-    return buildStats(
-      startSite,
-      endSite,
-      safeTravelMode,
-      safeRouteType,
-      timeMinutes
-    );
-  }, [startSite, endSite, safeTravelMode, safeRouteType, timeMinutes]);
-
-  const routeStops = useMemo(() => {
-    return buildRouteStops(startSite, endSite, safeRouteType, timeMinutes);
-  }, [startSite, endSite, safeRouteType, timeMinutes]);
-
-  const segments = useMemo(() => {
-    return buildSegmentsFromStops(routeStops, safeRouteType);
-  }, [routeStops, safeRouteType]);
-
-  const cueGroups = useMemo(() => {
-    return buildCueGroups(segments, safeRouteType, timeMinutes);
-  }, [segments, safeRouteType, timeMinutes]);
-
-  const narrativeSteps = useMemo(() => {
-    return buildNarrativeSteps(
-      segments,
-      cueGroups,
-      safeRouteType,
-      timeMinutes,
-      startSite,
-      endSite
-    );
-  }, [
-    segments,
-    cueGroups,
-    safeRouteType,
-    timeMinutes,
-    startSite,
-    endSite,
-  ]);
-
-  const sidebarCueAnchors = useMemo(() => {
-    return getSidebarCueAnchors(cueCatalog, safeRouteType);
-  }, [safeRouteType]);
-
-  function getCueDisplayName(cue) {
-    const key = getCueKey(cue);
-  
-    switch (key) {
-      case "heritage":
-        return "null";
-      case "transit":
-      case "bus":
-        return "Transit cue";
-      case "crossing":
-      case "signal":
-        return "Crossing cue";
-      case "threshold":
-        return "Threshold cue";
-      case "shade":
-      case "tree":
-        return "Shaded edge";
-      case "rest":
-      case "bench":
-        return "Rest point";
-      case "lighting":
-      case "lamp":
-        return "Lighting cue";
-      case "water":
-        return "Water cue";
-      case "rhythm":
-        return "Rhythm cue";
-      default:
-        return cue?.label || cue?.type || "Spatial cue";
+  function handleDesktopStart({ start, end, travelMode: tm, routeType: rt, timeMinutes: time }) {
+    if (end?.lat && !isWithinCoverage(end.lat, end.lng)) {
+      const bp = nearestBoundaryPoint(end.lat, end.lng);
+      setDesktopBoundsWarning({ start, end, travelMode: tm, routeType: rt, timeMinutes: time, boundaryPoint: bp });
+      return;
     }
-  }
-  
-  function getCuePhaseLabel(stepType) {
-    switch (stepType) {
-      case "start":
-        return "Starting cue";
-      case "orientation":
-        return "Orientation cue";
-      case "intensity":
-        return "Intensity cue";
-      case "transition":
-        return "Transition cue";
-      case "arrival":
-        return "Arrival cue";
-      default:
-        return "Spatial cue";
-    }
+    applyDesktopJourney({ start, end, travelMode: tm, routeType: rt, timeMinutes: time });
   }
 
-
-  
-  function getCueKey(cue) {
-    return String(cue?.type || cue?.label || "")
-      .trim()
-      .toLowerCase();
-  }
-  
-  function getSidebarCueForStep(step) {
-    const cueItems = Array.isArray(step?.cues) ? step.cues : [];
-  
-    const nonHeritageCues = cueItems.filter((cue) => {
-      const key = getCueKey(cue);
-      return key && key !== "heritage";
-    });
-  
-    if (!nonHeritageCues.length) return null;
-  
-    const preferredByStep = {
-      start: ["threshold", "shade", "tree", "transit", "bus"],
-      orientation: ["crossing", "signal", "transit", "bus", "threshold"],
-      intensity: ["lighting", "lamp", "transit", "bus", "crossing", "signal"],
-      transition: ["rest", "bench", "shade", "tree", "threshold"],
-      arrival: ["rest", "bench", "lighting", "lamp", "threshold"],
-    };
-  
-    const preferredKeys = preferredByStep[step?.type] || [];
-  
-    for (const pref of preferredKeys) {
-      const matched = nonHeritageCues.find((cue) => getCueKey(cue) === pref);
-      if (matched) return matched;
-    }
-  
-    return nonHeritageCues[0];
+  function applyDesktopJourney({ start, end, travelMode: tm, routeType: rt, timeMinutes: time }) {
+    setStartSite(start);
+    setEndSite(end);
+    setTravelMode(tm);
+    setRouteType(rt);
+    setTimeMinutes(time);
+    setRouteGeometry(null); // reset — MapView will repopulate
+    setDesktopJourney({ start, end });
+    setDesktopBoundsWarning(null);
+    setSelectedSite(null);
   }
 
-  function getSidebarCueAnchors(cueCatalog = [], routeType = "adventure") {
-    const usable = (cueCatalog || []).filter((cue) => {
-      const key = String(cue?.type || cue?.label || "").toLowerCase();
-      return key && key !== "heritage";
-    });
-  
-    if (!usable.length) return [];
-  
-    const preferred =
-      routeType === "adventure"
-        ? [
-            "transit",
-            "bus",
-            "crossing",
-            "signal",
-            "threshold",
-            "shade",
-            "tree",
-            "rest",
-            "bench",
-            "lighting",
-            "lamp",
-          ]
-        : ["transit", "crossing", "threshold", "shade", "rest"];
-  
-    const picked = [];
-    const used = new Set();
-  
-    preferred.forEach((type) => {
-      const match = usable.find((cue) => {
-        const key = String(cue?.type || cue?.label || "").toLowerCase();
-        const id = cue.id || `${cue.type}-${cue.label}`;
-        return key === type && !used.has(id);
-      });
-  
-      if (match) {
-        picked.push(match);
-        used.add(match.id || `${match.type}-${match.label}`);
-      }
-    });
-  
-    return picked.slice(0, 3);
+  function handleDesktopRouteToBoundary() {
+    if (!desktopBoundsWarning) return;
+    const { start, travelMode: tm, routeType: rt, timeMinutes: time, boundaryPoint } = desktopBoundsWarning;
+    applyDesktopJourney({ start, end: { name: "Edge of coverage area", lat: boundaryPoint.lat, lng: boundaryPoint.lng }, travelMode: tm, routeType: rt, timeMinutes: time });
   }
 
-  const anchorItems = useMemo(() => {
-    const items = [];
-  
-    routeStops.forEach((site, index) => {
-      items.push({
-        kind: "heritage",
-        id: `heritage-${site.id}`,
-        order: items.length + 1,
-        heritageId: site.id,
-        name: site.name,
-        period: site.period || site.category || "Heritage stop",
-        description:
-          site.shortDescription ||
-          site.description ||
-          "A key heritage anchor on this route.",
-        raw: site,
-      });
-  
-      const cue = sidebarCueAnchors[index % Math.max(sidebarCueAnchors.length, 1)];
-      const cueName = cue ? getCueDisplayName(cue) : null;
-      
-      if (cue && cueName) {
-        items.push({
-          kind: "cue",
-          id: `cue-${cue.id || cue.type || cue.label}-${index}`,
-          order: items.length + 1,
-          cueType: cue.type || "cue",
-          name: cueName,
-          period:
-            index === 0
-              ? "Starting cue"
-              : index === routeStops.length - 1
-              ? "Arrival cue"
-              : "Spatial cue",
-          description: `This cue helps structure attention and movement along this route.`,
-          raw: {
-            ...cue,
-            name: cueName,
-            label: cueName,
-          },
-        });
-      }
-    });
-  
-    return items;
-  }, [routeStops, sidebarCueAnchors]);
+  function handleMobileJourneyStart({ startCoords, endCoords, endName, travelMode: tm, routeType: rt, timeMinutes: time }) {
+    setStartSite(startCoords ? { name: "Start", lat: startCoords.lat, lng: startCoords.lng } : null);
+    setEndSite({ name: endName, lat: endCoords.lat, lng: endCoords.lng });
+    setTravelMode(tm);
+    setRouteType(rt || "exploratory");
+    setTimeMinutes(time || 60);
+    setRouteGeometry(null);
+  }
 
   function handleTimeChange(delta) {
-    setTimeMinutes((prev) => {
-      const next = prev + delta;
-      return Math.min(MAX_TIME, Math.max(MIN_TIME, next));
-    });
-  }
-
-  function handleStartChange(nextStart) {
-    if (!nextStart || nextStart === end) return;
-    setStart(nextStart);
-  }
-
-  function handleEndChange(nextEnd) {
-    if (!nextEnd || nextEnd === start) return;
-    setEnd(nextEnd);
+    setTimeMinutes((p) => Math.min(120, Math.max(15, p + delta)));
   }
 
   function swapLocations() {
-    setStart(end);
-    setEnd(start);
+    const tmp = startSite; setStartSite(endSite); setEndSite(tmp);
+    setRouteGeometry(null);
   }
 
-  useEffect(() => {
-    if (!["Journey", "Anchors"].includes(activeTab)) {
-      setActiveTab("Journey");
-    }
-  }, [activeTab]);
+  // Route stops — recalculate when route geometry arrives from MapView
+  const routeStops = useMemo(
+    () => buildRouteStops(startSite, endSite, routeType, timeMinutes, travelMode, heritageSites, routeGeometry),
+    [startSite, endSite, routeType, timeMinutes, travelMode, heritageSites, routeGeometry]
+  );
 
-  useEffect(() => {
-    if (selectedHeritage) {
-      setIsPanelOpen(false);
-    }
-  }, [selectedHeritage]);
+  const anchorItems = useMemo(
+    () => buildAnchorItems(routeStops, travelMode),
+    [routeStops, travelMode]
+  );
 
-  useEffect(() => {
-    setIsPanelOpen(true);
-  }, [activeTab]);
+  const stats = useMemo(
+    () => buildStats(startSite, endSite, travelMode, routeType, timeMinutes, routeStops),
+    [startSite, endSite, travelMode, routeType, timeMinutes, routeStops]
+  );
 
-  useEffect(() => {
-    setSelectedHeritage(null);
-    setSelectedCue(null);
-    setSelectedNarrativeStep(null);
-    setStoryOpen(true);
-  }, [start, end, safeRouteType, safeTravelMode, timeMinutes]);
+  useEffect(() => { setSelectedSite(null); }, [startSite, endSite, routeType, travelMode, timeMinutes]);
 
-  useEffect(() => {
-    if (!selectedNarrativeStep && narrativeSteps.length > 0) {
-      setSelectedNarrativeStep(narrativeSteps[0]);
-    }
-  }, [narrativeSteps, selectedNarrativeStep]);
+  // ── Render ─────────────────────────────────────────────────────────────────
 
-  useEffect(() => {
-    if (
-      selectedNarrativeStep &&
-      !narrativeSteps.some((step) => step.id === selectedNarrativeStep.id)
-    ) {
-      setSelectedNarrativeStep(narrativeSteps[0] || null);
-    }
-  }, [narrativeSteps, selectedNarrativeStep]);
+  if (!splashDone) return <SplashScreen onComplete={() => setSplashDone(true)} />;
 
-  useEffect(() => {
-    function handleResize() {
-      setWindowWidth(window.innerWidth);
-    }
+  if (!dataReady) {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "#2c2318", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+        {[0, 1, 2].map((i) => <span key={i} className="loading-dot" style={{ animationDelay: `${i * 0.2}s` }} />)}
+      </div>
+    );
+  }
 
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  if (isMobile) {
+    return (
+      <MobileLayout
+        routeStops={routeStops}
+        stats={stats}
+        onJourneyStart={handleMobileJourneyStart}
+        heritageSites={heritageSites}
+        onRouteGeometry={handleRouteGeometry}
+      />
+    );
+  }
 
-  const isMobile = windowWidth <= 768;
+  if (!desktopJourney) {
+    return (
+      <>
+        <DesktopSetupOverlay onStart={handleDesktopStart} />
+        {desktopBoundsWarning && (
+          <BoundsWarning onRouteToBoundary={handleDesktopRouteToBoundary} onCancel={() => setDesktopBoundsWarning(null)} />
+        )}
+      </>
+    );
+  }
 
-  const sharedProps = {
-    heritageSites,
-    routeStops,
-    anchorItems,
-    segments,
-    cueGroups,
-    narrativeSteps,
-    selectedNarrativeStep,
-    setSelectedNarrativeStep,
-    startSite,
-    endSite,
-    safeTravelMode,
-    safeRouteType,
-    timeMinutes,
-    stats,
-    selectedHeritage,
-    setSelectedHeritage,
-    selectedCue,
-    setSelectedCue,
-  };
-
-  return isMobile ? (
-    <MobileLayout
-      {...sharedProps}
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-      start={start}
-      setStart={handleStartChange}
-      end={end}
-      setEnd={handleEndChange}
-      swapLocations={swapLocations}
-      travelMode={safeTravelMode}
-      setTravelMode={setTravelMode}
-      routeType={safeRouteType}
-      setRouteType={setRouteType}
-      handleTimeChange={handleTimeChange}
-      timeStep={TIME_STEP}
-      locations={locations}
-    />
-  ) : (
-<DesktopLayout
-  {...sharedProps}
-  isPanelOpen={isPanelOpen}
-  setIsPanelOpen={setIsPanelOpen}
-  storyOpen={storyOpen}
-  setStoryOpen={setStoryOpen}
-  activeTab={activeTab}
-  setActiveTab={setActiveTab}
-  start={start}
-  setStart={handleStartChange}
-  end={end}
-  setEnd={handleEndChange}
-  swapLocations={swapLocations}
-  travelMode={safeTravelMode}
-  setTravelMode={setTravelMode}
-  routeType={safeRouteType}
-  setRouteType={setRouteType}
-  timeMinutes={timeMinutes}
-  handleTimeChange={handleTimeChange}
-  timeStep={TIME_STEP}
-  locations={locations}
-/>
+  return (
+    <>
+      <DesktopLayout
+        startSite={startSite} endSite={endSite}
+        travelMode={travelMode} setTravelMode={setTravelMode}
+        routeType={routeType} setRouteType={setRouteType}
+        timeMinutes={timeMinutes} handleTimeChange={handleTimeChange} timeStep={15}
+        routeStops={routeStops} anchorItems={anchorItems} stats={stats}
+        selectedSite={selectedSite} setSelectedSite={setSelectedSite}
+        start={startSite} setStart={setStartSite}
+        end={endSite} setEnd={setEndSite}
+        swapLocations={swapLocations}
+        onRouteGeometry={handleRouteGeometry}
+      />
+      {desktopBoundsWarning && (
+        <BoundsWarning onRouteToBoundary={handleDesktopRouteToBoundary} onCancel={() => setDesktopBoundsWarning(null)} />
+      )}
+    </>
   );
 }

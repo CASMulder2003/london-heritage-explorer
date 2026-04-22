@@ -1,0 +1,33 @@
+{
+"type": "FeatureCollection",
+"name": "parks",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "name": "Kensington Gardens", "category": "park", "wikipedia": "en:Kensington Gardens", "wikidata": "Q822607" }, "geometry": { "type": "Point", "coordinates": [ -0.179065605830493, 51.506793016032056 ] } },
+{ "type": "Feature", "properties": { "name": "Grosvenor Square", "category": "park", "wikipedia": "en:Grosvenor Square", "wikidata": "Q932992" }, "geometry": { "type": "Point", "coordinates": [ -0.151395380730968, 51.511497897286098 ] } },
+{ "type": "Feature", "properties": { "name": "Leicester Square", "category": "park", "wikipedia": "en:Leicester Square", "wikidata": "Q848912" }, "geometry": { "type": "Point", "coordinates": [ -0.130086730689829, 51.51042370665683 ] } },
+{ "type": "Feature", "properties": { "name": "Victoria Embankment Gardens", "category": "park", "wikipedia": "en:Victoria Embankment Gardens", "wikidata": "Q7926695" }, "geometry": { "type": "Point", "coordinates": [ -0.121475557064097, 51.508489613854998 ] } },
+{ "type": "Feature", "properties": { "name": "Golden Square", "category": "park", "wikipedia": "en:Golden Square", "wikidata": "Q5579811" }, "geometry": { "type": "Point", "coordinates": [ -0.137182926596006, 51.511654924390385 ] } },
+{ "type": "Feature", "properties": { "name": "Dean's Yard", "category": "park", "wikipedia": "en:Dean's Yard", "wikidata": "Q5245943" }, "geometry": { "type": "Point", "coordinates": [ -0.129000491286521, 51.498564211051487 ] } },
+{ "type": "Feature", "properties": { "name": "College Green", "category": "park", "wikipedia": "en:College Green, London", "wikidata": "Q59756" }, "geometry": { "type": "Point", "coordinates": [ -0.12611860890637, 51.498007930999734 ] } },
+{ "type": "Feature", "properties": { "name": "Victoria Tower Gardens", "category": "park", "wikipedia": "en:Victoria Tower Gardens", "wikidata": "Q2485117" }, "geometry": { "type": "Point", "coordinates": [ -0.124910482681973, 51.496764540974588 ] } },
+{ "type": "Feature", "properties": { "name": "St James's Square Gardens", "category": "park", "wikipedia": "en:St James's Square", "wikidata": "Q500529" }, "geometry": { "type": "Point", "coordinates": [ -0.135257100731905, 51.50717101882821 ] } },
+{ "type": "Feature", "properties": { "name": "Lincoln's Inn Fields", "category": "park", "wikipedia": "en:Lincoln's Inn Fields", "wikidata": "Q2736153" }, "geometry": { "type": "Point", "coordinates": [ -0.116192916301948, 51.515658233013603 ] } },
+{ "type": "Feature", "properties": { "name": "Soho Square Gardens", "category": "park", "wikipedia": "en:Soho Square", "wikidata": "Q2705335" }, "geometry": { "type": "Point", "coordinates": [ -0.132212480633189, 51.51529261370839 ] } },
+{ "type": "Feature", "properties": { "name": "Hyde Park", "category": "park", "wikipedia": "en:Hyde Park, London", "wikidata": "Q123738" }, "geometry": { "type": "Point", "coordinates": [ -0.163680749660528, 51.506855293950423 ] } },
+{ "type": "Feature", "properties": { "name": "St. James's Park", "category": "park", "wikipedia": "en:St James's Park", "wikidata": "Q216914" }, "geometry": { "type": "Point", "coordinates": [ -0.133716045801404, 51.502725788965186 ] } },
+{ "type": "Feature", "properties": { "name": "The Green Park", "category": "park", "wikipedia": "en:Green Park", "wikidata": "Q119892" }, "geometry": { "type": "Point", "coordinates": [ -0.143800226828162, 51.503926941811798 ] } },
+{ "type": "Feature", "properties": { "name": "Russell Square", "category": "park", "wikipedia": "en:Russell Square", "wikidata": "Q1346906" }, "geometry": { "type": "Point", "coordinates": [ -0.126067885092351, 51.521697481204932 ] } },
+{ "type": "Feature", "properties": { "name": "Tavistock Square", "category": "park", "wikipedia": "en:Tavistock Square", "wikidata": "Q1936696" }, "geometry": { "type": "Point", "coordinates": [ -0.129020688996414, 51.525042183336801 ] } },
+{ "type": "Feature", "properties": { "name": "Primrose Hill", "category": "park", "wikipedia": "en:Primrose Hill", "wikidata": "Q149942" }, "geometry": { "type": "Point", "coordinates": [ -0.161067201520771, 51.53893974971573 ] } },
+{ "type": "Feature", "properties": { "name": "Gordon Square", "category": "park", "wikipedia": "en:Gordon Square", "wikidata": "Q5585854" }, "geometry": { "type": "Point", "coordinates": [ -0.130871981980215, 51.524265060947926 ] } },
+{ "type": "Feature", "properties": { "name": "Queen Square Gardens", "category": "park", "wikipedia": "en:Queen Square, London", "wikidata": "Q3414013" }, "geometry": { "type": "Point", "coordinates": [ -0.122445870922005, 51.521774746910801 ] } },
+{ "type": "Feature", "properties": { "name": "Red Lion Square Gardens", "category": "park", "wikipedia": "en:Red Lion Square", "wikidata": "Q7304535" }, "geometry": { "type": "Point", "coordinates": [ -0.11889411862004, 51.519189909513649 ] } },
+{ "type": "Feature", "properties": { "name": "Bloomsbury Square Gardens", "category": "park", "wikipedia": "en:Bloomsbury Square", "wikidata": "Q885408" }, "geometry": { "type": "Point", "coordinates": [ -0.122824090548289, 51.518919904147047 ] } },
+{ "type": "Feature", "properties": { "name": "Waterlow Park", "category": "park", "wikipedia": "en:Waterlow Park", "wikidata": "Q7974321" }, "geometry": { "type": "Point", "coordinates": [ -0.144784050861, 51.568373507748902 ] } },
+{ "type": "Feature", "properties": { "name": "Lincoln's Inn Fields", "category": "park", "wikipedia": "en:Lincoln's Inn Fields", "wikidata": "Q2736153" }, "geometry": { "type": "Point", "coordinates": [ -0.116597615686575, 51.516277386330088 ] } },
+{ "type": "Feature", "properties": { "name": "Brunswick Square Gardens", "category": "park", "wikipedia": "en:Brunswick Square", "wikidata": "Q4979544" }, "geometry": { "type": "Point", "coordinates": [ -0.121788208864072, 51.524430357370555 ] } },
+{ "type": "Feature", "properties": { "name": "Coram's Fields", "category": "park", "wikipedia": "en:Coram's Fields", "wikidata": "Q1131898" }, "geometry": { "type": "Point", "coordinates": [ -0.120026173231823, 51.524394862426313 ] } },
+{ "type": "Feature", "properties": { "name": "Hampstead Heath", "category": "park", "wikipedia": "en:Hampstead Heath", "wikidata": "Q1570958" }, "geometry": { "type": "Point", "coordinates": [ -0.164866841363826, 51.563996990337301 ] } }
+]
+}
