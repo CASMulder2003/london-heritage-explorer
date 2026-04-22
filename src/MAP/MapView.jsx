@@ -383,41 +383,43 @@ export default function MapView({
     map.flyTo({ center: [selectedSite.lng, selectedSite.lat], zoom: 16, duration: 900 });
   }, [selectedSite, mapReady]);
 
-  // ── Fly to user when navigation begins ────────────────────────────────────
-  // When journeyStage first becomes "navigating", fly to user position instantly
-  const prevJourneyStageRef = useRef(null);
+  // ── Navigation zoom ────────────────────────────────────────────────────────
+  const hasBegunNavigatingRef = useRef(false);
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
-    const wasNavigating = prevJourneyStageRef.current === "navigating";
-    prevJourneyStageRef.current = journeyStage;
 
-    if (journeyStage !== "navigating") return;
+    if (journeyStage === "navigating") {
+      const current = routeStops[currentAnchorIndex];
+      const prev = routeStops[currentAnchorIndex - 1];
 
-    // Just entered navigating stage — fly to user position
-    if (!wasNavigating) {
-      const target = userCoords || routeStops[0];
-      if (target) {
-        map.flyTo({
-          center: [target.lng, target.lat],
-          zoom: 16,
-          duration: 400,
-          pitch: 20,
-        });
+      if (!hasBegunNavigatingRef.current) {
+        // Very first time entering navigation
+        hasBegunNavigatingRef.current = true;
+        if (userCoords) {
+          map.flyTo({ center: [userCoords.lng, userCoords.lat], zoom: 16, duration: 400, pitch: 20 });
+        } else if (prev && current) {
+          const bounds = new mapboxgl.LngLatBounds();
+          bounds.extend([prev.lng, prev.lat]);
+          bounds.extend([current.lng, current.lat]);
+          map.fitBounds(bounds, { padding: { top: 120, right: 60, bottom: 180, left: 60 }, maxZoom: 15, duration: 600 });
+        }
+      } else {
+        // Continuing from an arrival — show prev stop → current target
+        if (prev && current) {
+          const bounds = new mapboxgl.LngLatBounds();
+          bounds.extend([prev.lng, prev.lat]);
+          bounds.extend([current.lng, current.lat]);
+          map.fitBounds(bounds, { padding: { top: 120, right: 60, bottom: 180, left: 60 }, maxZoom: 15, duration: 600 });
+        } else if (current) {
+          map.flyTo({ center: [current.lng, current.lat], zoom: 15, duration: 600 });
+        }
       }
-      return;
     }
 
-    // Advanced to next stop — show segment between previous and current target
-    const current = routeStops[currentAnchorIndex];
-    const prev = routeStops[Math.max(0, currentAnchorIndex - 1)];
-    if (current && prev && current !== prev) {
-      const bounds = new mapboxgl.LngLatBounds();
-      bounds.extend([prev.lng, prev.lat]);
-      bounds.extend([current.lng, current.lat]);
-      map.fitBounds(bounds, { padding: { top: 120, right: 60, bottom: 180, left: 60 }, maxZoom: 15, duration: 600 });
-    } else if (current) {
-      map.flyTo({ center: [current.lng, current.lat], zoom: 16, duration: 600 });
+    // Reset when journey restarts
+    if (journeyStage === "setup") {
+      hasBegunNavigatingRef.current = false;
     }
   }, [currentAnchorIndex, journeyStage, mapReady, routeStops, userCoords]);
 

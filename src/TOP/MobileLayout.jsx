@@ -5,6 +5,7 @@ import OverviewScreen from "../mobile/OverviewScreen";
 import NavigationScreen from "../mobile/NavigationScreen";
 import ArrivalScreen from "../mobile/ArrivalScreen";
 import SiteDetailScreen from "../mobile/SiteDetailScreen";
+import { unlockAudio, playArrivalSound, playDestinationSound } from "../services/audio";
 
 const ARRIVAL_RADIUS_METERS = 40;
 
@@ -101,6 +102,7 @@ export default function MobileLayout({
       arrivedIds.current.add(target.id || target.name);
       // End destination — go straight to finished screen
       if (currentAnchorIndex >= routeStops.length - 1) {
+        playDestinationSound();
         setStage("finished");
       } else {
         setArrivedSite(target);
@@ -135,6 +137,8 @@ export default function MobileLayout({
   // ── Begin navigation ──────────────────────────────────────────────────────
 
   function handleBegin() {
+    // Unlock audio context on this user tap — needed for iOS
+    unlockAudio();
     // Start at index 1 — index 0 is the start point, not a heritage stop
     setCurrentAnchorIndex(1);
     arrivedIds.current.clear();
@@ -151,22 +155,26 @@ export default function MobileLayout({
 
   function handleContinueFromDetail() {
     setSiteDetail(null);
-    advanceToNext();
+    if (currentAnchorIndex === routeStops.length - 2) {
+      setStage("headingToDestination");
+    } else {
+      advanceToNext();
+    }
   }
 
   function handleContinueFromArrival() {
     setArrivedSite(null);
-    advanceToNext();
+    // If this was the last heritage stop, show the "heading to destination" message
+    if (currentAnchorIndex === routeStops.length - 2) {
+      setStage("headingToDestination");
+    } else {
+      advanceToNext();
+    }
   }
 
   function advanceToNext() {
     const next = currentAnchorIndex + 1;
     if (next >= routeStops.length) {
-      // Past the end — shouldn't happen but guard it
-      setStage("finished");
-    } else if (next === routeStops.length - 1) {
-      // Reached the end destination — go straight to finished
-      setCurrentAnchorIndex(next);
       setStage("finished");
     } else {
       setCurrentAnchorIndex(next);
@@ -182,11 +190,13 @@ export default function MobileLayout({
     }
     // End destination — go straight to finished
     if (currentAnchorIndex >= routeStops.length - 1) {
+      playDestinationSound();
       setStage("finished");
       return;
     }
     const target = routeStops[currentAnchorIndex];
     if (target) {
+      playArrivalSound(target.category);
       arrivedIds.current.add(target.id || target.name);
       setArrivedSite(target);
       setStage("arrived");
@@ -253,7 +263,7 @@ export default function MobileLayout({
           showRoute={false}
           userCoords={userCoords}
           deviceHeading={deviceHeading}
-          journeyStage={stage}
+          journeyStage={stage === "headingToDestination" ? "navigating" : stage}
           currentAnchorIndex={currentAnchorIndex}
           narrativeSteps={narrativeSteps}
           selectedNarrativeStep={selectedNarrativeStep}
@@ -267,6 +277,30 @@ export default function MobileLayout({
               timeMinutes={timeMinutes}
               onBegin={handleBegin}
             />
+          )}
+
+          {stage === "headingToDestination" && (
+            <div className="mobile-overview-overlay">
+              <div className="mobile-overview-handle" />
+              <div style={{ fontSize: "2rem", textAlign: "center", marginBottom: "12px" }}>✦</div>
+              <h2 style={{ fontFamily: "Georgia, serif", fontSize: "1.4rem", fontWeight: 400, color: "#2f2418", margin: "0 0 12px", textAlign: "center" }}>
+                All stops visited
+              </h2>
+              <p style={{ fontFamily: "Georgia, serif", fontStyle: "italic", fontSize: "0.9rem", color: "#81796f", lineHeight: 1.7, textAlign: "center", margin: "0 0 24px" }}>
+                You've explored {routeStops.length - 2} heritage {routeStops.length - 2 === 1 ? "site" : "sites"} along the way. Now let's get you to your destination.
+              </p>
+              <button
+                type="button"
+                className="mobile-begin-btn"
+                onClick={() => {
+                  const next = currentAnchorIndex + 1;
+                  setCurrentAnchorIndex(next);
+                  setStage("navigating");
+                }}
+              >
+                Head to destination →
+              </button>
+            </div>
           )}
 
           {stage === "navigating" && (
