@@ -3,7 +3,7 @@ import { searchAddress } from "../services/geocode";
 import { isWithinCoverageAsync, nearestBoundaryPoint } from "../services/boundary";
 import BoundsWarning from "../components/BoundsWarning";
 
-const TIME_OPTIONS = [15, 30, 45, 60, 90, 120];
+const TIME_OPTIONS = [30, 45, 60, 90, 120];
 
 function MobileAddressSearch({ value, onChange, placeholder }) {
   const isConfirmed = typeof value === "object" && value?.lat;

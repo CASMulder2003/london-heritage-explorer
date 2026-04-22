@@ -346,7 +346,7 @@ export default function App() {
   }
 
   function handleTimeChange(delta) {
-    setTimeMinutes((p) => Math.min(120, Math.max(15, p + delta)));
+    setTimeMinutes((p) => Math.min(120, Math.max(30, p + delta)));
   }
 
   function swapLocations() {
