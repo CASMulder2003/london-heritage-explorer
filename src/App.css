@@ -30,7 +30,7 @@ select {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  background: #ebe7df;
+  background: #efe5d4;
 }
 
 .map-panel {
@@ -39,7 +39,7 @@ select {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #ebe7df;
+  background: #efe5d4;
 }
 
 .panel-shell {
@@ -59,10 +59,10 @@ select {
   top: 18px;
   left: 18px;
   z-index: 60;
-  border: 1px solid rgba(221, 214, 202, 0.78);
-  background: rgba(252, 251, 248, 0.78);
+  border: 1px solid #8E412E;
+  background: #A5513A;
   backdrop-filter: blur(10px);
-  color: #1f1f1f;
+  color: #FDF8EE;
   border-radius: 999px;
   padding: 9px 14px;
   font-size: 13px;
@@ -152,8 +152,8 @@ select {
 }
 
 .tab.active {
-  background: #1f1f1f;
-  border-color: #1f1f1f;
+  background: #A5513A;
+  border-color: #8E412E;
   color: #fff;
   font-weight: 600;
 }
@@ -230,11 +230,11 @@ select {
 }
 
 .start-dot {
-  background: #2f9e44;
+  background: #5A7A8C;
 }
 
 .end-dot {
-  background: #d94841;
+  background: #5A7A8C;
 }
 
 .swap-row {
@@ -299,9 +299,9 @@ select {
 }
 
 .toggle-pill.active {
-  background: #1f1f1f;
-  color: #fff;
-  border-color: #1f1f1f;
+  background: #A5513A;
+  color: #FFF;
+  border-color: #8E412E;
   font-weight: 600;
 }
 
@@ -343,7 +343,7 @@ select {
   min-width: 94px;
   text-align: center;
   font-weight: 700;
-  color: #534ab7;
+  color: #3c6b87;
 }
 
 /* ---------- Placeholder tabs ---------- */
@@ -498,33 +498,33 @@ select {
   align-items: center;
   padding: 10px 14px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(6px);
-  border: 1px solid rgba(120, 108, 92, 0.08);
+  background: #4A5D6A;
+  backdrop-filter: null;
+  border: 1px solid rgba(80, 94, 129, 0.08);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
   font-size: 13px;
 }
 
 .map-badge strong {
   font-size: 14px;
-  color: #1f1f1f;
+  color: #FDF8EE;
 }
 
 .map-badge span {
-  color: #666;
+  color: #FDF8EE;
 }
 
 .story-toggle-wrap {
   right: 18px;
-  bottom: 18px;
+  bottom: 80px;
   z-index: 12;
 }
 
 .story-toggle-button {
-  border: 1px solid rgba(120, 108, 92, 0.1);
+  border: 1px solid #8E412E;
   background: rgba(255, 252, 248, 0.92);
   backdrop-filter: blur(10px);
-  color: #1f1f1f;
+  color: #A5513A;
   border-radius: 999px;
   padding: 10px 14px;
   font-size: 13px;
@@ -534,9 +534,9 @@ select {
 }
 
 .story-toggle-button.open {
-  background: #1f1f1f;
-  color: #fff;
-  border-color: #1f1f1f;
+  background: #A5513A;
+  color: #FDF8EE;
+  border-color: #8E412E;
 }
 
 .map-story-drawer {
@@ -629,7 +629,7 @@ select {
 }
 
 .legend-toggle.active {
-  background: rgba(91, 79, 229, 0.08);
+  background: rgba(167, 85, 85, 0.098);
   opacity: 1;
 }
 
@@ -655,7 +655,7 @@ select {
 }
 
 .legend-dot.heritage {
-  background: #5b4fe5;
+  background: #8E352E;
 }
 
 .narrative-panel {
@@ -767,8 +767,8 @@ select {
 }
 
 .story-step.active {
-  border-color: rgba(124, 58, 237, 0.28);
-  background: rgba(124, 58, 237, 0.06);
+  border-color: rgba(31, 68, 103, 0.28);
+  background: rgba(55, 120, 181, 0.06);
 }
 
 .story-step__top {
@@ -855,8 +855,8 @@ select {
   font-size: 0.78rem;
   padding: 5px 9px;
   border-radius: 999px;
-  background: rgba(124, 58, 237, 0.08);
-  color: #5b2fb0;
+  background: #3c618461;
+  color: #3c6184;
 }
 
 .detail-card__button {
@@ -931,7 +931,7 @@ select {
   height: 20px;
   border: 3px solid rgba(255, 255, 255, 0.98);
   border-radius: 999px;
-  background: #6156e2;
+  background: #8E352E;
   box-shadow: 0 4px 10px rgba(76, 67, 216, 0.18);
   cursor: pointer;
   transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
@@ -943,7 +943,7 @@ select {
 }
 
 .heritage-marker.active {
-  background: #4d42d8;
+  background: #8c534f;
   transform: scale(1.16);
   box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.94),
     0 8px 18px rgba(76, 67, 216, 0.22);
@@ -952,7 +952,7 @@ select {
 .heritage-marker.endpoint {
   width: 24px;
   height: 24px;
-  background: #756af0;
+  background: #713f3c;
 }
 
 .heritage-marker.muted {
@@ -1010,24 +1010,16 @@ select {
   height: 28px;
   padding: 0 10px;
   border-radius: 999px;
-  background: #eeedfe;
-  color: #534ab7;
+  background: #eef2f6;
+  color: #2B3E50;
   font-size: 13px;
   font-weight: 700;
   margin-bottom: 10px;
 }
 
 .popup-img {
-  width: 100%;
-  height: 108px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, #f3efe8 0%, #ece7f8 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #7f786d;
-  font-size: 12px;
-  margin-bottom: 14px;
+  background: transparent;
+  position: relative;
 }
 
 .popup-meta {
@@ -1057,7 +1049,7 @@ select {
   display: inline-block;
   font-size: 13px;
   font-weight: 600;
-  color: #534ab7;
+  color: #2B3E50;
   background: transparent;
   border: none;
   padding: 0;
@@ -1087,35 +1079,35 @@ select {
 }
 
 .map-feature-marker.cue-shade {
-  background: #2f9e44;
+  background: #508e76;
   width: 9px;
   height: 9px;
   border-radius: 999px;
 }
 
 .map-feature-marker.cue-transit {
-  background: #e03131;
+  background: #4A5D6A;
   width: 9px;
   height: 9px;
   border-radius: 2px;
 }
 
 .map-feature-marker.cue-crossing {
-  background: #f08c00;
+  background: #4d4058;
   width: 6px;
   height: 6px;
   border-radius: 999px;
 }
 
 .map-feature-marker.cue-rest {
-  background: #8d6e63;
+  background: #8f7157;
   width: 11px;
   height: 4px;
   border-radius: 2px;
 }
 
 .map-feature-marker.cue-lighting {
-  background: #fab005;
+  background: #D4AF37;
   width: 8px;
   height: 8px;
   border-radius: 999px;
@@ -1482,7 +1474,7 @@ select {
     width: auto;
     max-width: none;
     max-height: 38vh;
-    border-radius: 24px;
+    border-radius: 5px;
   }
 
   .map-meta {

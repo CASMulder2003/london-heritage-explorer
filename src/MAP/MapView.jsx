@@ -822,7 +822,7 @@ const generatedCueCount = useMemo(() => {
 
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
-      style: "mapbox://styles/mapbox/streets-v12",
+      style: "mapbox://styles/yutongchen/cmo8pfvxp002e01rx798ne9l7",
       center: LONDON_CENTER,
       zoom: 12.8,
       attributionControl: false,
@@ -863,17 +863,10 @@ const generatedCueCount = useMemo(() => {
           "line-join": "round",
         },
         paint: {
-          "line-color": "#8f8a82",
-          "line-width": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            12, 24,
-            14, 40,
-            16, 60
-          ],
-          "line-opacity": 0.06,
-          "line-blur": 0.6,
+          "line-color": "#5A7A8C",
+          "line-width": 12,
+          "line-opacity": 0.3,
+          "line-blur": 0,
         },
       });
 
@@ -886,10 +879,10 @@ const generatedCueCount = useMemo(() => {
           "line-join": "round",
         },
         paint: {
-          "line-color": "#7c3aed",
-          "line-width": 2.8,
-          "line-opacity": 0.18,
-          "line-dasharray": [1.2, 1.8],
+          "line-color": "#5A7A8C",
+          "line-width": 8,
+          "line-opacity": 1,
+          "line-dasharray": [1, 0],
         },
       });
 
@@ -928,14 +921,14 @@ const generatedCueCount = useMemo(() => {
           "circle-color": [
             "match",
             ["get", "type"],
-            "shade", "#34C759",
-            "water", "#36B5D8",
-            "lighting", "#F4B942",
-            "transit", "#3B82F6",
-            "crossing", "#E74C3C",
-            "rest", "#A2846A",
-            "threshold", "#FF7AA2",
-            "rhythm", "#C58B00",
+            "shade", "#508e76",
+            "water", "#58939c",
+            "lighting", "#D4AF37",
+            "transit", "#4A5D6A",
+            "crossing", "#4d4058",
+            "rest", "#8f7157",
+            "threshold", "#7B506F",
+            "rhythm", "#5b5649",
             "#999999",
           ],
           "circle-opacity": isMobileView ? 0.1 : 0.12,
@@ -979,14 +972,14 @@ const generatedCueCount = useMemo(() => {
           "circle-color": [
             "match",
             ["get", "type"],
-            "shade", "#34C759",
-            "water", "#36B5D8",
-            "lighting", "#F4B942",
-            "transit", "#3B82F6",
-            "crossing", "#E74C3C",
-            "rest", "#A2846A",
-            "threshold", "#FF7AA2",
-            "rhythm", "#C58B00",
+            "shade", "#508e76",
+            "water", "#58939c",
+            "lighting", "#D4AF37",
+            "transit", "#4A5D6A",
+            "crossing", "#4d4058",
+            "rest", "#8f7157",
+            "threshold", "#7B506F",
+            "rhythm", "#5b5649",
             "#999999",
           ],
           "circle-opacity": [
@@ -1092,9 +1085,9 @@ const generatedCueCount = useMemo(() => {
       );
     
       if (routeType !== "adventure") {
-        map.setPaintProperty("route-line", "line-color", "#2563eb");
-        map.setPaintProperty("route-line", "line-opacity", 0.18);
-        map.setPaintProperty("route-line", "line-width", 2.2);
+        map.setPaintProperty("route-line", "line-color", "#5A7A8C");
+        map.setPaintProperty("route-line", "line-opacity", 1);
+        map.setPaintProperty("route-line", "line-width", 8);
         map.setPaintProperty("route-line", "line-dasharray", [1, 0]);
       }
     }
@@ -1107,9 +1100,9 @@ const generatedCueCount = useMemo(() => {
       );
     
       if (routeType !== "adventure") {
-        map.setPaintProperty("route-corridor", "line-color", "#2563eb");
-        map.setPaintProperty("route-corridor", "line-opacity", 0.04);
-        map.setPaintProperty("route-corridor", "line-width", 8);
+        map.setPaintProperty("route-corridor", "line-color", "#5A7A8C");
+        map.setPaintProperty("route-corridor", "line-opacity", 0.3);
+        map.setPaintProperty("route-corridor", "line-width", 12);
       }
     }
   }, [routeType, mapReady]);
@@ -1575,9 +1568,6 @@ const generatedCueCount = useMemo(() => {
   
   return (
     <div className="map-view">
-      <div className="map-meta">
-        <span>Source: {sourceLabel}</span>
-      </div>
 
       <div className="map-overlay top-right">
         <div className="map-badge">
