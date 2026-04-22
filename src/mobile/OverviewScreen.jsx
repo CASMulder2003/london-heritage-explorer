@@ -17,7 +17,7 @@ export default function OverviewScreen({ stats, routeStops, travelMode, timeMinu
         <div className="mobile-overview-stats">
           <span>{stats?.distance || "—"}</span>
           <span>·</span>
-          <span>{routeStops.length} {routeStops.length === 1 ? "stop" : "stops"}</span>
+          <span>{routeStops.length - 2} {routeStops.length - 2 === 1 ? "stop" : "stops"}</span>
         </div>
 
         <p className="mobile-overview-hint">
