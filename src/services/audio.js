@@ -8,6 +8,10 @@ export function unlockAudio() {
     if (_ctx.state === 'suspended') {
       _ctx.resume();
     }
+    // Play a soft two-note chime — unlocks iOS audio and signals journey start
+    const t = _ctx.currentTime;
+    note(1047, t,        0.35, 0.15, 'sine');
+    note(1319, t + 0.18, 0.45, 0.12, 'sine');
   } catch {}
 }
 
@@ -28,6 +32,7 @@ function note(freq, startTime, duration, peakGain, type) {
 
 export function playDestinationSound() {
   if (!_ctx) return;
+  if (_ctx.state === 'suspended') _ctx.resume();
   const t = _ctx.currentTime;
   note(523,  t + 0.0,  1.2, 0.22, 'triangle');
   note(659,  t + 0.08, 1.1, 0.20, 'triangle');
@@ -38,6 +43,8 @@ export function playDestinationSound() {
 
 export function playArrivalSound(category) {
   if (!_ctx) return;
+  // Resume context if suspended — iOS suspends after inactivity
+  if (_ctx.state === 'suspended') _ctx.resume();
   const t = _ctx.currentTime;
 
   if (category === 'park') {
