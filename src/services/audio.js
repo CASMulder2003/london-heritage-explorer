@@ -1,4 +1,5 @@
 let _ctx = null;
+let _keepAliveNode = null;
 
 export function unlockAudio() {
   try {
@@ -12,6 +13,28 @@ export function unlockAudio() {
     const t = _ctx.currentTime;
     note(1047, t,        0.35, 0.15, 'sine');
     note(1319, t + 0.18, 0.45, 0.12, 'sine');
+
+    // Start silent keep-alive oscillator to prevent iOS from suspending the context
+    if (_keepAliveNode) {
+      _keepAliveNode.stop();
+      _keepAliveNode = null;
+    }
+    const osc = _ctx.createOscillator();
+    const gain = _ctx.createGain();
+    gain.gain.setValueAtTime(0, _ctx.currentTime); // completely silent
+    osc.connect(gain);
+    gain.connect(_ctx.destination);
+    osc.start();
+    _keepAliveNode = osc;
+  } catch {}
+}
+
+export function stopAudio() {
+  try {
+    if (_keepAliveNode) {
+      _keepAliveNode.stop();
+      _keepAliveNode = null;
+    }
   } catch {}
 }
 
@@ -32,7 +55,6 @@ function note(freq, startTime, duration, peakGain, type) {
 
 export function playDestinationSound() {
   if (!_ctx) return;
-  if (_ctx.state === 'suspended') _ctx.resume();
   const t = _ctx.currentTime;
   note(523,  t + 0.0,  1.2, 0.22, 'triangle');
   note(659,  t + 0.08, 1.1, 0.20, 'triangle');
@@ -43,8 +65,6 @@ export function playDestinationSound() {
 
 export function playArrivalSound(category) {
   if (!_ctx) return;
-  // Resume context if suspended — iOS suspends after inactivity
-  if (_ctx.state === 'suspended') _ctx.resume();
   const t = _ctx.currentTime;
 
   if (category === 'park') {

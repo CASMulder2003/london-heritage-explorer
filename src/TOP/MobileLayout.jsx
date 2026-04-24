@@ -5,9 +5,19 @@ import OverviewScreen from "../mobile/OverviewScreen";
 import NavigationScreen from "../mobile/NavigationScreen";
 import ArrivalScreen from "../mobile/ArrivalScreen";
 import SiteDetailScreen from "../mobile/SiteDetailScreen";
-import { unlockAudio, playArrivalSound, playDestinationSound } from "../services/audio";
+import { unlockAudio, playArrivalSound, playDestinationSound, stopAudio } from "../services/audio";
 
-const ARRIVAL_RADIUS_METERS = 40;
+const ARRIVAL_RADIUS_METERS = 40; // default fallback
+
+function getArrivalRadius(category) {
+  switch (category) {
+    case 'park':     return 40;
+    case 'memorial': return 30;
+    case 'church':   return 50;
+    case 'listed':   return 80;
+    default:         return 40;
+  }
+}
 
 function getDistanceMeters(from, to) {
   if (!from || !to) return Infinity;
@@ -98,11 +108,14 @@ export default function MobileLayout({
     const target = routeStops[currentAnchorIndex];
     if (!target || arrivedIds.current.has(target.id || target.name)) return;
     const dist = getDistanceMeters(userCoords, { lat: target.lat, lng: target.lng });
-    if (dist <= ARRIVAL_RADIUS_METERS) {
+    if (dist <= getArrivalRadius(target.category)) {
       arrivedIds.current.add(target.id || target.name);
+      // Resume audio context — iOS may have suspended it since the last tap
+      unlockAudio();
       // End destination — go straight to finished screen
       if (currentAnchorIndex >= routeStops.length - 1) {
         playDestinationSound();
+        stopAudio();
         setStage("finished");
       } else {
         setArrivedSite(target);
@@ -191,6 +204,7 @@ export default function MobileLayout({
     // End destination — go straight to finished
     if (currentAnchorIndex >= routeStops.length - 1) {
       playDestinationSound();
+      stopAudio();
       setStage("finished");
       return;
     }
